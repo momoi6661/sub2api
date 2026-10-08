@@ -3,6 +3,7 @@ export default {
       title: '账号管理',
       description: '管理 AI 平台账号和 Cookie',
       createAccount: '添加账号',
+      oauthAccountNamePlaceholder: '可留空，授权后自动使用邮箱；获取不到邮箱时使用平台名称',
       autoRefresh: '自动刷新',
       enableAutoRefresh: '启用自动刷新',
       refreshInterval5s: '5 秒',

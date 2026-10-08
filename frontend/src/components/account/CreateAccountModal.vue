@@ -50,9 +50,9 @@
         <input
           v-model="form.name"
           type="text"
-          :required="!isGrokSSOInputMethod"
+          :required="!isOAuthFlow"
           class="input"
-          :placeholder="t('admin.accounts.enterAccountName')"
+          :placeholder="t(isOAuthFlow ? 'admin.accounts.oauthAccountNamePlaceholder' : 'admin.accounts.enterAccountName')"
           data-tour="account-form-name"
         />
       </div>
@@ -3923,6 +3923,7 @@ import {
   type AuthInputMethod
 } from '@/composables/useAccountOAuth'
 import { useOpenAIOAuth } from '@/composables/useOpenAIOAuth'
+import { oauthAccountName } from '@/utils/oauthAccountName'
 import { useGeminiOAuth } from '@/composables/useGeminiOAuth'
 import { useAntigravityOAuth } from '@/composables/useAntigravityOAuth'
 import { useGrokOAuth } from '@/composables/useGrokOAuth'
@@ -4770,8 +4771,6 @@ const isOAuthFlow = computed(() => {
   }
   return accountCategory.value === 'oauth-based'
 })
-
-const isGrokSSOInputMethod = computed(() => form.platform === 'grok' && oauthFlowRef.value?.inputMethod === 'sso_cookie')
 
 const isManualInputMethod = computed(() => {
   return oauthFlowRef.value?.inputMethod === 'manual'
@@ -5656,10 +5655,6 @@ const handleVertexServiceAccountDrop = async (event: DragEvent) => {
 const handleSubmit = async () => {
   // For OAuth-based type, handle OAuth flow (goes to step 2)
   if (isOAuthFlow.value) {
-    if (!isGrokSSOInputMethod.value && !form.name.trim()) {
-      appStore.showError(t('admin.accounts.pleaseEnterAccountName'))
-      return
-    }
     const canContinue = await ensureAntigravityMixedChannelConfirmed(async () => {
       step.value = 2
     })
@@ -6025,7 +6020,9 @@ const createAccountAndFinish = async (
     }
   }
   await doCreateAccount({
-    name: form.name,
+    name: type === 'oauth' || type === 'setup-token'
+      ? oauthAccountName(form.name, credentials.email || credentials.email_address || extra?.email || extra?.email_address, platform)
+      : form.name,
     notes: form.notes,
     platform,
     type,
@@ -6368,7 +6365,7 @@ const handleOpenAIExchange = async (authCode: string) => {
 
     if (shouldCreateOpenAI) {
       await adminAPI.accounts.create({
-        name: form.name,
+        name: oauthAccountName(form.name, tokenInfo.email, 'OpenAI'),
         notes: form.notes,
         platform: 'openai',
         type: 'oauth',
@@ -6644,8 +6641,7 @@ const handleOpenAIBatchRT = async (refreshTokenInput: string, clientId?: string)
         }
 
         // Generate account name; fallback to email if name is empty (ent schema requires NotEmpty)
-        const baseName = form.name || tokenInfo.email || 'OpenAI OAuth Account'
-        const accountName = refreshTokens.length > 1 ? `${baseName} #${i + 1}` : baseName
+        const accountName = oauthAccountName(form.name, tokenInfo.email, 'OpenAI', i, refreshTokens.length)
 
         if (shouldCreateOpenAI) {
           await adminAPI.accounts.create({
@@ -6744,7 +6740,7 @@ const handleAntigravityValidateRT = async (refreshTokenInput: string) => {
         applyAntigravityProjectID(credentials, antigravityProjectId.value, 'create')
         
         // Generate account name with index for batch
-        const accountName = refreshTokens.length > 1 ? `${form.name} #${i + 1}` : form.name
+        const accountName = oauthAccountName(form.name, tokenInfo.email, 'Antigravity', i, refreshTokens.length)
 
         // Note: Antigravity doesn't have buildExtraInfo, so we pass empty extra or rely on credentials
         const createPayload = withAntigravityConfirmFlag({
@@ -7119,7 +7115,7 @@ const handleCookieAuth = async (sessionKey: string) => {
           extra.custom_base_url = customBaseUrl.value.trim()
         }
 
-        const accountName = keys.length > 1 ? `${form.name} #${i + 1}` : form.name
+        const accountName = oauthAccountName(form.name, tokenInfo.email_address || extra.email_address, form.platform, i, keys.length)
 
         const credentials: Record<string, unknown> = { ...tokenInfo }
         applyInterceptWarmup(credentials, interceptWarmupRequests.value, 'create')

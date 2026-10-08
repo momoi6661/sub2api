@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const {
   createAccountMock,
+  generateAuthUrlMock,
+  exchangeCodeMock,
   probeUpstreamBillingMock,
   syncUpstreamModelsMock,
   showWarningMock,
@@ -12,6 +14,8 @@ const {
   authIsSimpleMode,
 } = vi.hoisted(() => ({
   createAccountMock: vi.fn(),
+  generateAuthUrlMock: vi.fn(),
+  exchangeCodeMock: vi.fn(),
   probeUpstreamBillingMock: vi.fn(),
   syncUpstreamModelsMock: vi.fn(),
   showWarningMock: vi.fn(),
@@ -40,6 +44,8 @@ vi.mock('@/api/admin', () => ({
   adminAPI: {
     accounts: {
       create: createAccountMock,
+      generateAuthUrl: generateAuthUrlMock,
+      exchangeCode: exchangeCodeMock,
       probeUpstreamBilling: probeUpstreamBillingMock,
       syncUpstreamModels: syncUpstreamModelsMock,
       checkMixedChannelRisk: vi.fn().mockResolvedValue({ has_risk: false }),
@@ -85,10 +91,11 @@ const OAuthAuthorizationFlowStub = defineComponent({
     showCodexPatOption: Boolean,
     initialInputMethod: String,
   },
-  data: () => ({ inputMethod: 'manual' }),
-  emits: ['import-codex-session', 'import-codex-pat'],
+  data: () => ({ inputMethod: 'manual', authCode: 'test-code', oauthState: 'test-state' }),
+  emits: ['import-codex-session', 'import-codex-pat', 'generate-url'],
   template: `
     <div>
+      <button data-testid="generate-auth-url" @click="$emit('generate-url')">authorize</button>
       <button data-testid="import-codex-session" @click="$emit('import-codex-session', 'session-json')">session</button>
       <button data-testid="import-codex-pat" @click="$emit('import-codex-pat', 'pat-token')">pat</button>
     </div>
@@ -196,6 +203,8 @@ async function openCodexImportStep(toggleClicks = 0) {
 
 describe('CreateAccountModal OpenAI long-context billing', () => {
   beforeEach(() => {
+    generateAuthUrlMock.mockReset().mockResolvedValue({ auth_url: 'https://example.com/oauth?state=test-state', session_id: 'test-session' })
+    exchangeCodeMock.mockReset().mockResolvedValue({ access_token: 'test-access-token', email: 'user@example.com' })
     authIsSimpleMode.value = true
     createAccountMock.mockReset().mockResolvedValue({ id: 42, platform: 'openai', type: 'apikey' })
     probeUpstreamBillingMock.mockReset().mockResolvedValue({})
@@ -213,6 +222,36 @@ describe('CreateAccountModal OpenAI long-context billing', () => {
   })
 
   afterEach(() => vi.useRealTimers())
+
+  it.each([
+    ['', 'user@example.com', 'user@example.com'],
+    [' Custom label ', 'user@example.com', 'Custom label'],
+    ['', undefined, 'OpenAI OAuth Account'],
+  ])('creates an authorized account with the expected name: %s', async (name, email, expectedName) => {
+    exchangeCodeMock.mockResolvedValue({ access_token: 'test-access-token', email })
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    const nameInput = wrapper.get<HTMLInputElement>('[data-tour="account-form-name"]')
+    expect(nameInput.element.required).toBe(false)
+    await nameInput.setValue(name)
+    await wrapper.get('form#create-account-form').trigger('submit.prevent')
+    await flushPromises()
+    await wrapper.get('[data-testid="generate-auth-url"]').trigger('click')
+    await flushPromises()
+    await selectButtonByText(wrapper, 'admin.accounts.oauth.completeAuth')
+    await flushPromises()
+    expect(createAccountMock).toHaveBeenCalledTimes(1)
+    expect(createAccountMock.mock.calls[0][0].name).toBe(expectedName)
+    wrapper.unmount()
+  })
+
+  it('keeps a name required for API key accounts', async () => {
+    const wrapper = mountModal()
+    await selectButtonByText(wrapper, 'OpenAI')
+    await selectButtonByText(wrapper, 'API Key')
+    expect(wrapper.get<HTMLInputElement>('[data-tour="account-form-name"]').element.required).toBe(true)
+    wrapper.unmount()
+  })
 
   it('sets month and year expiry presets without submitting the account form', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })

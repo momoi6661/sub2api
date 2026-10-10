@@ -1,0 +1,29 @@
+# Add to the chosen panel compose file:
+# docker compose -f docker-compose.dev.yml -f docker-compose.reauth.yml up -d --build
+services:
+  sub2api:
+    environment:
+      ONE_CLICK_AUTH_RUNNER_URL: http://reauth-runner:8189
+      ONE_CLICK_AUTH_RUNNER_TOKEN: ${REAUTH_RUNNER_TOKEN:?Set a random token of at least 32 characters}
+    depends_on:
+      reauth-runner:
+        condition: service_started
+  reauth-runner:
+    build:
+      context: ../tools/reauth-runner
+    image: sub2api-reauth-runner:local
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp:size=512m,mode=1777
+    shm_size: 256mb
+    mem_limit: 1g
+    cpus: 2
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    environment:
+      BIND_HOST: 0.0.0.0
+      REAUTH_RUNNER_TOKEN: ${REAUTH_RUNNER_TOKEN:?Set a random token of at least 32 characters}

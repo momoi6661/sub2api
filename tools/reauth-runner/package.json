@@ -1,0 +1,17 @@
+{
+  "name": "sub2api-reauth-runner",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs"
+  },
+  "dependencies": {
+    "http-proxy-agent": "^7.0.2",
+    "https-proxy-agent": "^7.0.6",
+    "imapflow": "^2.4.0",
+    "mailparser": "^3.9.38",
+    "node-fetch": "^3.3.2",
+    "playwright": "1.58.2",
+    "socks-proxy-agent": "^8.0.5"
+  }
+}

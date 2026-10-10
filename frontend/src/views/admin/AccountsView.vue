@@ -122,6 +122,8 @@
                           {{ t('admin.accounts.toolActions') }}
                         </div>
                       </div>
+                      <button class="account-tools-menu-item" :disabled="!selIds.length" @click="openAuthBinding"><span class="flex-1 text-left">{{ t('admin.accounts.authProfiles.batch') }}</span></button>
+                      <button class="account-tools-menu-item" :disabled="!selIds.length || batchAuthBusy" @click="batchOneClickAuth"><span class="flex-1 text-left">{{ t('admin.accounts.authProfiles.batchAuthorize') }}</span></button>
                       <button class="account-tools-menu-item" @click="openErrorPassthrough">
                         <span class="account-tools-menu-icon bg-amber-50 text-amber-600 dark:bg-amber-900/30 dark:text-amber-300">
                           <Icon name="shield" size="sm" />
@@ -441,7 +443,8 @@
                 :title="t('admin.accounts.oneClickAuth.title')"
                 class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-primary-600 transition-colors hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20"
                 data-testid="one-click-auth-button"
-                @click="handleReAuth(row)"
+                :disabled="authOpening.has(row.id)"
+                @click="handleOneClickAuth(row)"
               >
                 <Icon name="link" size="sm" />
                 <span class="text-xs">{{ t('admin.accounts.oneClickAuth.short') }}</span>
@@ -496,6 +499,11 @@
     </ConfirmDialog>
     <ErrorPassthroughRulesModal :show="showErrorPassthrough" @close="showErrorPassthrough = false" />
     <TLSFingerprintProfilesModal :show="showTLSFingerprintProfiles" @close="showTLSFingerprintProfiles = false" />
+    <BaseDialog :show="showAuthBinding" :title="t('admin.accounts.authProfiles.batch')" @close="showAuthBinding = false">
+      <select v-model="bindingProfileID" class="input" :disabled="authBindingBusy"><option value="">{{ t('admin.accounts.authProfiles.select') }}</option><option v-for="profile in bindingProfiles" :key="profile.id" :value="profile.id" :disabled="!profile.enabled">{{ profile.name }}</option></select>
+      <p v-if="bindingError" role="alert" class="mt-3 text-red-600">{{ bindingError }}</p>
+      <template #footer><button class="btn btn-secondary" :disabled="authBindingBusy" @click="showAuthBinding = false">{{ t('common.cancel') }}</button><button class="btn btn-primary" :disabled="authBindingBusy || !bindingProfileID" @click="bindAuthProfile">{{ t('common.save') }}</button></template>
+    </BaseDialog>
     <TotpStepUpDialog :controller="accountExportStepUp" />
   </AppLayout>
 </template>
@@ -503,9 +511,11 @@
 <script setup lang="ts">
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
+import BaseDialog from '@/components/common/BaseDialog.vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
+import { listReauthProfiles, runOneClickAuth, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { adminAPI } from '@/api/admin'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
@@ -2369,7 +2379,65 @@ const handleSchedule = async (a: Account) => {
   }
 }
 const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
+const authOpening = reactive(new Set<number>())
 const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
+async function handleOneClickAuth(a: AccountListItem) {
+  if (authOpening.has(a.id)) return
+  authOpening.add(a.id)
+  try {
+    await runOneClickAuth(a.id)
+    appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
+    reload()
+  } catch (e: any) {
+    const details = e?.response?.data || e
+    const message = details?.message || e?.message || t('admin.accounts.authProfiles.failed')
+    const retryHint = details?.metadata?.retryable === 'true' ? t('admin.accounts.authProfiles.retryable') : t('admin.accounts.authProfiles.notRetryable')
+    appStore.showError(details?.reason ? `${message} (${details.reason}) · ${retryHint}` : message)
+  }
+  finally { authOpening.delete(a.id) }
+}
+const batchAuthBusy = ref(false)
+async function batchOneClickAuth() {
+  if (batchAuthBusy.value) return
+  batchAuthBusy.value = true
+  const ids = [...selIds.value]
+  try {
+    // Serialize tasks so shared inboxes and the runner concurrency limit are respected.
+    for (const id of ids) {
+      try {
+        const account = await adminAPI.accounts.getById(id)
+        if (canOneClickAuthorize(account)) await handleOneClickAuth(account)
+      } catch (e: any) { appStore.showError(e?.message || t('admin.accounts.authProfiles.failed')) }
+    }
+  } finally { batchAuthBusy.value = false }
+}
+const showAuthBinding = ref(false), authBindingBusy = ref(false)
+const bindingProfiles = ref<ReauthProfile[]>([])
+const bindingProfileID = ref(''), bindingError = ref('')
+let bindingAccountIDs: number[] = []
+async function openAuthBinding() {
+  bindingAccountIDs = [...selIds.value]
+  bindingProfileID.value = ''; bindingError.value = ''; showAuthBinding.value = true; authBindingBusy.value = true
+  try { bindingProfiles.value = await listReauthProfiles() }
+  catch (e: any) { bindingError.value = e?.message || t('admin.accounts.authProfiles.failed') }
+  finally { authBindingBusy.value = false }
+}
+async function bindAuthProfile() {
+  if (authBindingBusy.value || !bindingProfileID.value) return
+  authBindingBusy.value = true; bindingError.value = ''
+  try {
+    let count = 0
+    for (const id of bindingAccountIDs) {
+      const account = await adminAPI.accounts.getById(id)
+      if (!canOneClickAuthorize(account)) continue
+      await adminAPI.accounts.update(id, { extra: { ...account.extra, one_click_auth_profile_id: bindingProfileID.value } })
+      count++
+    }
+    showAuthBinding.value = false
+    appStore.showSuccess(t('admin.accounts.authProfiles.batchDone', { count })); reload()
+  } catch (e: any) { bindingError.value = e?.message || t('admin.accounts.authProfiles.failed') }
+  finally { authBindingBusy.value = false }
+}
 const duplicatingAccountIDs = new Set<number>()
 const handleDuplicateAccount = async (a: Account) => {
   if (duplicatingAccountIDs.has(a.id)) return

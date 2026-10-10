@@ -49,6 +49,9 @@ func NewOAuthHandler(oauthService *service.OAuthService) *OAuthHandler {
 
 // AccountHandler handles admin account management
 type AccountHandler struct {
+	reauthSettings          *service.SettingService
+	reauthWorker            *service.OneClickAuthWorker
+	reauthLocks             service.LeaderLockCache
 	claudeResetCredits      claudeResetReader
 	adminService            service.AdminService
 	oauthService            *service.OAuthService
@@ -1609,25 +1612,29 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		return
 	}
 
-	ctx := c.Request.Context()
+	account, err := h.applyOAuthCredentials(c.Request.Context(), accountID, &req)
+	if response.ErrorFrom(c, err) {
+		return
+	}
+	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+}
+
+// Shared persistence path for manual, one-click and background authorization.
+func (h *AccountHandler) applyOAuthCredentials(ctx context.Context, accountID int64, req *ApplyOAuthCredentialsRequest) (*service.Account, error) {
 
 	// 预检查账号存在 + OAuth 类型（与 Refresh handler 语义一致，提供更友好的错误信息）。
 	existing, err := h.adminService.GetAccount(ctx, accountID)
 	if err != nil {
-		response.NotFound(c, "Account not found")
-		return
+		return nil, err
 	}
 	if !existing.IsOAuth() {
-		response.ErrorFrom(c, infraerrors.BadRequest("NOT_OAUTH", "cannot apply oauth credentials to non-OAuth account"))
-		return
+		return nil, infraerrors.BadRequest("NOT_OAUTH", "cannot apply oauth credentials to non-OAuth account")
 	}
 	if err := service.ValidateOpenAILongContextBillingExtra(existing.Platform, req.Extra); err != nil {
-		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
 	if err := service.ValidateUpstreamRequestIDHeaderExtra(req.Extra); err != nil {
-		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
 
 	// Re-auth only returns authentication fields. Preserve account configuration
@@ -1642,8 +1649,7 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		Credentials: req.Credentials,
 	})
 	if err != nil {
-		response.ErrorFrom(c, err)
-		return
+		return nil, err
 	}
 
 	// 增量合并 Extra（JSONB key 级 merge，绝不覆盖 base_rpm / window_cost_limit /
@@ -1696,7 +1702,7 @@ func (h *AccountHandler) ApplyOAuthCredentials(c *gin.Context) {
 		}
 	}
 
-	response.Success(c, h.buildAccountResponseWithRuntime(ctx, updatedAccount))
+	return updatedAccount, nil
 }
 
 // GetStats handles getting account statistics

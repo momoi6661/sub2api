@@ -1680,7 +1680,7 @@
       >
         <div class="flex items-start justify-between gap-4">
           <div>
-            <label class="input-label mb-0">{{ t('admin.accounts.oneClickAuth.title') }}</label>
+            <label class="input-label mb-0">{{ t('admin.accounts.authProfiles.auto') }}</label>
             <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {{ t('admin.accounts.oneClickAuth.desc') }}
             </p>
@@ -1688,12 +1688,13 @@
           <button
             type="button"
             role="switch"
+            @click="oneClickAuthEnabled = !oneClickAuthEnabled"
+            :aria-label="t('admin.accounts.authProfiles.auto')"
             :aria-checked="oneClickAuthEnabled"
             :class="[
               'relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
               oneClickAuthEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
             ]"
-            @click="oneClickAuthEnabled = !oneClickAuthEnabled"
           >
             <span
               :class="[
@@ -1703,17 +1704,21 @@
             />
           </button>
         </div>
-        <div v-if="oneClickAuthEnabled" class="mt-3">
-          <label class="input-label">{{ t('admin.accounts.oneClickAuth.profile') }}</label>
-          <input
-            v-model="oneClickAuthProfile"
-            type="text"
-            class="input"
-            :placeholder="t('admin.accounts.oneClickAuth.profilePlaceholder')"
-            maxlength="120"
-          />
-          <p class="input-hint">{{ t('admin.accounts.oneClickAuth.profileHint') }}</p>
+        <p v-if="account?.extra?.one_click_auth_last_status" class="mt-2 text-sm" :class="account.extra.one_click_auth_last_status === 'failed' ? 'text-red-600' : 'text-green-600'">{{ t('admin.accounts.authProfiles.lastAutomatic') }}: {{ account.extra.one_click_auth_last_at }} · {{ account.extra.one_click_auth_last_status }} · {{ account.extra.one_click_auth_last_code }} {{ account.extra.one_click_auth_last_error }}</p>
+        <div class="mt-3 space-y-3">
+          <label for="one-click-profile" class="input-label">{{ t('admin.accounts.oneClickAuth.profile') }}</label>
+          <select id="one-click-profile" v-model="oneClickAuthProfile" class="input" :disabled="authProfilesLoading">
+            <option value="">{{ t('admin.accounts.authProfiles.select') }}</option>
+            <option v-if="oneClickAuthProfile && !authProfiles.some(p => p.id === oneClickAuthProfile)" :value="oneClickAuthProfile" disabled>{{ t('admin.accounts.authProfiles.missing') }}</option>
+            <option v-for="profile in authProfiles" :key="profile.id" :value="profile.id" :disabled="!profile.enabled">{{ profile.name }} — {{ profile.mailbox_address }}</option>
+          </select>
+          <div class="flex gap-2"><button type="button" class="btn btn-secondary" @click="showAuthProfileEditor = true">{{ t('admin.accounts.authProfiles.create') }}</button><button type="button" class="btn btn-secondary" :disabled="authProfilesLoading" @click="loadAuthProfiles">{{ t('common.refresh') }}</button></div>
+          <p v-if="authProfilesError" role="alert" class="text-sm text-red-600">{{ authProfilesError }}</p>
+          <label for="one-click-login-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
+          <input id="one-click-login-email" v-model="oneClickLoginEmail" type="email" class="input" />
+          <p class="input-hint">{{ t('admin.accounts.authProfiles.isolation') }}</p>
         </div>
+        <ReauthProfileEditor :show="showAuthProfileEditor" @close="showAuthProfileEditor = false" @saved="authProfileCreated" />
       </div>
 
       <UpstreamRequestIdHeaderField
@@ -3170,6 +3175,8 @@
 
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
+import ReauthProfileEditor from '@/components/account/ReauthProfileEditor.vue'
+import { listReauthProfiles, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 
@@ -3700,6 +3707,20 @@ const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(false)
 const oneClickAuthEnabled = ref(false)
 const oneClickAuthProfile = ref('')
+const oneClickLoginEmail = ref('')
+const authProfiles = ref<ReauthProfile[]>([])
+const authProfilesLoading = ref(false)
+const authProfilesError = ref('')
+const showAuthProfileEditor = ref(false)
+async function loadAuthProfiles() {
+  authProfilesLoading.value = true
+  authProfilesError.value = ''
+  try { authProfiles.value = await listReauthProfiles() }
+  catch (e: any) { authProfilesError.value = e?.message || t('admin.accounts.authProfiles.failed') }
+  finally { authProfilesLoading.value = false }
+}
+async function authProfileCreated(profile: ReauthProfile) { await loadAuthProfiles(); oneClickAuthProfile.value = profile.id }
+watch(() => props.show, show => { if (show) void loadAuthProfiles() }, { immediate: true })
 const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
@@ -4237,7 +4258,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   allowOverages.value = false
 	const extra = newAccount.extra as Record<string, unknown> | undefined
 	oneClickAuthEnabled.value = extra?.one_click_auth_enabled === true
-	oneClickAuthProfile.value = typeof extra?.one_click_auth_profile === 'string' ? extra.one_click_auth_profile : ''
+	oneClickAuthProfile.value = typeof extra?.one_click_auth_profile_id === 'string' ? extra.one_click_auth_profile_id : ''
+  oneClickLoginEmail.value = typeof extra?.one_click_auth_login_email === 'string' ? extra.one_click_auth_login_email : (typeof credentials?.email === 'string' ? credentials.email : '')
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
@@ -5256,13 +5278,11 @@ const handleSubmit = async () => {
     if (props.account.platform === 'openai' && props.account.type === 'oauth') {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra = { ...currentExtra }
-      if (oneClickAuthEnabled.value && oneClickAuthProfile.value.trim()) {
-        newExtra.one_click_auth_enabled = true
-        newExtra.one_click_auth_profile = oneClickAuthProfile.value.trim()
-      } else {
-        delete newExtra.one_click_auth_enabled
-        delete newExtra.one_click_auth_profile
-      }
+      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim()) { newExtra.one_click_auth_auto_attempt = '' }
+      newExtra.one_click_auth_enabled = oneClickAuthEnabled.value
+      newExtra.one_click_auth_profile_id = oneClickAuthProfile.value
+      newExtra.one_click_auth_login_email = oneClickLoginEmail.value.trim()
+      delete newExtra.one_click_auth_profile
       updatePayload.extra = newExtra
     }
 

@@ -550,6 +550,12 @@ const routes: RouteRecordRaw[] = [
     }
   },
   {
+    path: '/admin/reauth-profiles',
+    name: 'AdminReauthProfiles',
+    component: () => import('@/views/admin/ReauthProfilesView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Authorization Profiles', titleKey: 'admin.accounts.authProfiles.title' }
+  },
+  {
     path: '/admin/proxies',
     name: 'AdminProxies',
     component: () => import('@/views/admin/ProxiesView.vue'),

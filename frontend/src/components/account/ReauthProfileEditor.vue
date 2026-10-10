@@ -1,0 +1,95 @@
+<template>
+  <BaseDialog :show="show" :title="t('admin.accounts.authProfiles.edit')" @close="emit('close')">
+    <form id="reauth-profile-form" class="space-y-4" @submit.prevent="save">
+      <p class="input-hint">{{ t('admin.accounts.authProfiles.pending') }}</p>
+      <div><label for="auth-profile-name" class="input-label">{{ t('admin.accounts.authProfiles.name') }}</label><input id="auth-profile-name" v-model="form.name" class="input" required maxlength="120" /></div>
+      <label class="flex items-center gap-2"><input v-model="form.enabled" type="checkbox" />{{ t('admin.accounts.authProfiles.enabled') }}</label>
+      <div><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" :required="form.mailbox_mode !== 'api' || form.api_result_type !== 'auth_file'" /></div>
+      <div><label for="auth-profile-mode" class="input-label">{{ t('admin.accounts.authProfiles.mode') }}</label><select id="auth-profile-mode" v-model="form.mailbox_mode" class="input"><option value="imap">IMAP (TLS)</option><option value="api">HTTPS API</option></select></div>
+      <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div><label for="auth-profile-host" class="input-label">{{ t('admin.accounts.authProfiles.host') }}</label><input id="auth-profile-host" v-model="form.imap_host" class="input" required /></div>
+        <div><label for="auth-profile-port" class="input-label">{{ t('admin.accounts.authProfiles.port') }}</label><input id="auth-profile-port" v-model.number="form.imap_port" class="input" type="number" min="1" max="65535" required /></div>
+        <div class="sm:col-span-2"><label for="auth-profile-user" class="input-label">{{ t('admin.accounts.authProfiles.username') }}</label><input id="auth-profile-user" v-model="form.imap_username" class="input" :placeholder="form.mailbox_address" /></div>
+      </div>
+      <div v-else class="space-y-3">
+        <label for="auth-profile-result" class="input-label">{{ t('admin.accounts.authProfiles.resultType') }}</label>
+        <select id="auth-profile-result" v-model="form.api_result_type" class="input"><option value="code">{{ t('admin.accounts.authProfiles.codeResult') }}</option><option value="auth_file">{{ t('admin.accounts.authProfiles.fileResult') }}</option></select>
+        <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
+        <label for="auth-profile-api" class="input-label">{{ t('admin.accounts.authProfiles.apiURL') }}</label><input id="auth-profile-api" v-model="form.api_url" type="url" class="input" required placeholder="https://" />
+        <label for="auth-profile-script" class="input-label">{{ t('admin.accounts.authProfiles.script') }}</label>
+        <textarea id="auth-profile-script" v-model="form.code_script" class="input min-h-48 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="scriptExample" />
+        <p class="input-hint">{{ t(form.has_code_script ? 'admin.accounts.authProfiles.scriptKeep' : 'admin.accounts.authProfiles.scriptHint') }}</p>
+        <ReauthScriptRules />
+        <label for="auth-profile-test-email" class="input-label">{{ t('admin.accounts.authProfiles.testEmail') }}</label>
+        <input id="auth-profile-test-email" v-model="testEmail" type="email" class="input" />
+        <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
+        <p v-if="testResult" role="status" class="text-sm text-green-600">{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
+      </div>
+      <div><label for="auth-profile-secret" class="input-label">{{ t('admin.accounts.authProfiles.secret') }}</label><input id="auth-profile-secret" v-model="form.secret" class="input" type="password" autocomplete="new-password" /><p class="input-hint">{{ t(form.has_secret ? 'admin.accounts.authProfiles.secretKeep' : 'admin.accounts.authProfiles.secretHint') }}</p></div>
+      <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div><label for="auth-profile-folder" class="input-label">{{ t('admin.accounts.authProfiles.folder') }}</label><input id="auth-profile-folder" v-model="form.folder" class="input" /></div>
+        <div><label for="auth-profile-sender" class="input-label">{{ t('admin.accounts.authProfiles.sender') }}</label><input id="auth-profile-sender" v-model="form.sender_filter" class="input" /></div>
+      </div>
+      <div v-if="form.mailbox_mode === 'imap'"><label for="auth-profile-pattern" class="input-label">{{ t('admin.accounts.authProfiles.pattern') }}</label><input id="auth-profile-pattern" v-model="form.code_pattern" class="input font-mono" required /><p class="input-hint">{{ t('admin.accounts.authProfiles.isolation') }}</p></div>
+      <div><label class="input-label">{{ t('admin.accounts.authProfiles.proxy') }}</label><div class="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-dark-600"><label v-for="proxy in proxies" :key="proxy.id" class="flex items-center gap-2 text-sm"><input v-model="form.proxy_ids" type="checkbox" :value="proxy.id" />{{ proxy.name }}</label><p v-if="!proxies.length" class="input-hint">{{ t('admin.accounts.authProfiles.noProxies') }}</p></div><p class="input-hint">{{ t('admin.accounts.authProfiles.proxyHint') }}</p></div>
+      <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p><p v-if="errorCode" class="text-sm text-red-600">{{ errorCode }} · {{ t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable') }}</p>
+    </form>
+    <template #footer><button class="btn btn-secondary" :disabled="saving" @click="emit('close')">{{ t('common.cancel') }}</button><button form="reauth-profile-form" type="submit" class="btn btn-primary" :disabled="saving">{{ t('common.save') }}</button></template>
+  </BaseDialog>
+</template>
+
+<script setup lang="ts">
+import { ref, watch, onBeforeUnmount, computed } from 'vue'
+import { useI18n } from 'vue-i18n'
+import BaseDialog from '@/components/common/BaseDialog.vue'
+import ReauthScriptRules from './ReauthScriptRules.vue'
+import { saveReauthProfile, testReauthScript, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import { getAll } from '@/api/admin/proxies'
+import type { Proxy } from '@/types'
+
+const props = defineProps<{ show: boolean; profile?: ReauthProfile | null }>()
+const emit = defineEmits<{ close: []; saved: [profile: ReauthProfile] }>()
+const { t } = useI18n()
+const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbox_mode: 'imap', api_result_type: 'code', mailbox_address: '', imap_host: '', imap_port: 993, imap_username: '', api_url: '', code_script: '', has_code_script: false, folder: 'INBOX', sender_filter: '', code_pattern: '(\\d{6})', proxy_id: null, proxy_ids: [], secret: '', has_secret: false })
+const form = ref(defaults())
+const proxies = ref<Proxy[]>([])
+const saving = ref(false)
+const error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
+const testEmail = ref(''), testResult = ref(''), testing = ref(false)
+let testAbort: AbortController | null = null
+const scriptExample = computed(() => `// context: loginEmail, since, apiURL, mailboxAddress, secret
+// Filter messages by recipient and date in your API request.
+const response = await fetch(context.apiURL, {
+  headers: { Authorization: 'Bearer ' + context.secret },
+  credentials: 'omit'
+});
+if (!response.ok) throw new Error('Mailbox request failed');
+const data = await response.json();
+${form.value.api_result_type === 'auth_file' ? 'return { type: \'auth_file\', auth: data };' : 'return { type: \'code\', code: String(data.code) };'}`)
+async function testScript() {
+  if (testing.value) return
+  testing.value = true; error.value = ''; errorCode.value = ''; errorRetryable.value = false; testResult.value = ''
+  const controller = new AbortController(); testAbort = controller
+  try {
+    await testReauthScript(form.value, testEmail.value, controller.signal)
+    if (!controller.signal.aborted) testResult.value = 'ok'
+  } catch (e: any) { if (!controller.signal.aborted) { error.value = e?.message || t('admin.accounts.authProfiles.failed'); errorCode.value = e?.reason || e?.response?.data?.reason || e?.code || 'REQUEST_FAILED'; errorRetryable.value = (e?.metadata || e?.response?.data?.metadata)?.retryable === 'true' } }
+  finally { testing.value = false }
+}
+onBeforeUnmount(() => testAbort?.abort())
+watch(() => props.show, async show => {
+  testAbort?.abort(); testResult.value = ''; testEmail.value = ''
+  if (!show) { form.value.secret = ''; form.value.code_script = ''; return }
+  form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '' } : defaults()
+  error.value = ''; errorCode.value = ''
+  try { proxies.value = await getAll() } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
+})
+async function save() {
+  if (saving.value) return
+  saving.value = true
+  error.value = ''
+  try { emit('saved', await saveReauthProfile(form.value)); form.value.secret = ''; form.value.code_script = ''; emit('close') }
+  catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
+  finally { saving.value = false }
+}
+</script>

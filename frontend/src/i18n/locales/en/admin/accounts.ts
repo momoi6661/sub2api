@@ -500,6 +500,14 @@ export default {
       },
       testConnection: 'Test Connection',
       reAuthorize: 'Re-Authorize',
+      oneClickAuth: {
+        title: 'One-click authorization',
+        short: 'Authorize',
+        desc: 'Quickly restore this account with its assigned authorization profile when authorization expires. Disabled by default.',
+        profile: 'Authorization profile',
+        profilePlaceholder: 'e.g. Shared Gmail inbox or account mailbox',
+        profileHint: 'Enter the profile name first; mailbox access and code rules are managed in the authorization profile.'
+      },
       refreshToken: 'Refresh Token',
       noAccountsYet: 'No accounts yet',
       createFirstAccount: 'Create your first account to start using AI services.',

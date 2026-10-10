@@ -299,6 +299,14 @@ export default {
       },
       testConnection: '测试连接',
       reAuthorize: '重新授权',
+      oneClickAuth: {
+        title: '一键授权',
+        short: '一键授权',
+        desc: '账号授权失效后，可使用绑定的授权配置快速恢复。默认关闭。',
+        profile: '授权配置',
+        profilePlaceholder: '例如：总邮箱 Gmail 或账号专用邮箱',
+        profileHint: '先填写邮箱配置名称；邮箱读取和验证码设置将在授权配置中管理。'
+      },
       refreshToken: '刷新令牌',
       noAccountsYet: '暂无账号',
       createFirstAccount: '添加 AI 平台账号以开始使用 API 网关。',

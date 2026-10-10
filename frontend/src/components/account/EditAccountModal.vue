@@ -1672,6 +1672,50 @@
         <ProxySelector v-model="form.proxy_id" :proxies="proxies" />
       </div>
 
+      <!-- One-click authorization settings -->
+      <div
+        v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
+        class="border-t border-gray-200 pt-4 dark:border-dark-600"
+        data-testid="one-click-auth-section"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <label class="input-label mb-0">{{ t('admin.accounts.oneClickAuth.title') }}</label>
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              {{ t('admin.accounts.oneClickAuth.desc') }}
+            </p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="oneClickAuthEnabled"
+            :class="[
+              'relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2',
+              oneClickAuthEnabled ? 'bg-primary-600' : 'bg-gray-200 dark:bg-dark-600'
+            ]"
+            @click="oneClickAuthEnabled = !oneClickAuthEnabled"
+          >
+            <span
+              :class="[
+                'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition duration-200',
+                oneClickAuthEnabled ? 'translate-x-5' : 'translate-x-0'
+              ]"
+            />
+          </button>
+        </div>
+        <div v-if="oneClickAuthEnabled" class="mt-3">
+          <label class="input-label">{{ t('admin.accounts.oneClickAuth.profile') }}</label>
+          <input
+            v-model="oneClickAuthProfile"
+            type="text"
+            class="input"
+            :placeholder="t('admin.accounts.oneClickAuth.profilePlaceholder')"
+            maxlength="120"
+          />
+          <p class="input-hint">{{ t('admin.accounts.oneClickAuth.profileHint') }}</p>
+        </div>
+      </div>
+
       <UpstreamRequestIdHeaderField
         v-model="upstreamRequestIdHeader"
         :platform="account.platform"
@@ -3654,6 +3698,8 @@ const loadGrokMediaEligibility = async (accountID: number): Promise<GrokMediaEli
 
 const interceptWarmupRequests = ref(false)
 const autoPauseOnExpired = ref(false)
+const oneClickAuthEnabled = ref(false)
+const oneClickAuthProfile = ref('')
 const autoPause5hThreshold = ref<number | null>(null)
 const autoPause7dThreshold = ref<number | null>(null)
 const autoPause5hDisabled = ref(false)
@@ -4190,6 +4236,8 @@ const syncFormFromAccount = (newAccount: Account | null) => {
   mixedScheduling.value = false
   allowOverages.value = false
 	const extra = newAccount.extra as Record<string, unknown> | undefined
+	oneClickAuthEnabled.value = extra?.one_click_auth_enabled === true
+	oneClickAuthProfile.value = typeof extra?.one_click_auth_profile === 'string' ? extra.one_click_auth_profile : ''
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
 	upstreamRequestIdHeader.value = readUpstreamRequestIdHeader(extra)
@@ -5201,6 +5249,21 @@ const handleSubmit = async () => {
       if (upstreamBillingRateSyncEnabled.value) {
         delete updatePayload.rate_multiplier
       }
+    }
+
+    // One-click authorization is opt-in and is stored with the account so the
+    // account list can expose the shortcut without reopening this dialog.
+    if (props.account.platform === 'openai' && props.account.type === 'oauth') {
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra = { ...currentExtra }
+      if (oneClickAuthEnabled.value && oneClickAuthProfile.value.trim()) {
+        newExtra.one_click_auth_enabled = true
+        newExtra.one_click_auth_profile = oneClickAuthProfile.value.trim()
+      } else {
+        delete newExtra.one_click_auth_enabled
+        delete newExtra.one_click_auth_profile
+      }
+      updatePayload.extra = newExtra
     }
 
     // For apikey type, handle credentials update

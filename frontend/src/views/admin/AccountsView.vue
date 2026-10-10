@@ -176,6 +176,21 @@
             {{ t('admin.accounts.listPendingSyncAction') }}
           </button>
         </div>
+        <div v-if="authTasks.size || batchAuthBusy" class="mt-3 rounded-lg border border-gray-200 bg-white dark:border-dark-600 dark:bg-dark-800">
+          <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+            <button type="button" class="flex items-center gap-2 text-sm font-medium text-gray-900 dark:text-white" :aria-expanded="showAuthTasks" @click="showAuthTasks = !showAuthTasks">
+              <Icon :name="authOpening.size || batchAuthBusy ? 'refresh' : 'link'" size="md" :class="(authOpening.size || batchAuthBusy) && 'animate-spin'" />
+              {{ t('admin.accounts.oneClickAuth.tasks') }} · {{ authOpening.size ? t('admin.accounts.oneClickAuth.runningCount', { count: authOpening.size }) : t(batchAuthBusy ? 'admin.accounts.oneClickAuth.preparing' : 'admin.accounts.oneClickAuth.finished') }}
+            </button>
+            <div class="flex items-center gap-3">
+              <span v-if="batchAuthTotal" class="text-xs tabular-nums text-gray-500 dark:text-dark-400">{{ t('admin.accounts.oneClickAuth.batchProgress', { completed: batchAuthCompleted, total: batchAuthTotal }) }}</span>
+              <button type="button" class="btn btn-ghost btn-sm" :disabled="authOpening.size > 0 || batchAuthBusy" @click="authTasks.clear(); batchAuthTotal = 0">{{ t('admin.accounts.oneClickAuth.clearResults') }}</button>
+            </div>
+          </div>
+          <div v-if="showAuthTasks" class="max-h-80 space-y-3 overflow-y-auto border-t border-gray-200 p-3 dark:border-dark-600">
+            <OneClickAuthProgress v-for="task in [...authTasks.values()].reverse()" :key="task.id" :title="task.title" :stage="task.stage" :status="task.status" :started-at="task.startedAt" :finished-at="task.finishedAt" :error="task.error" />
+          </div>
+        </div>
       </template>
       <template #table>
         <AccountBulkActionsBar
@@ -446,8 +461,8 @@
                 :disabled="authOpening.has(row.id)"
                 @click="handleOneClickAuth(row)"
               >
-                <Icon name="link" size="sm" />
-                <span class="text-xs">{{ t('admin.accounts.oneClickAuth.short') }}</span>
+                <Icon :name="authOpening.has(row.id) ? 'refresh' : 'link'" size="sm" :class="authOpening.has(row.id) && 'animate-spin'" />
+                <span class="text-xs">{{ t(authOpening.has(row.id) ? 'admin.accounts.oneClickAuth.running' : 'admin.accounts.oneClickAuth.short') }}</span>
               </button>
               <button @click="handleEdit(row)" class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-gray-500 transition-colors hover:bg-gray-100 hover:text-primary-600 dark:hover:bg-dark-700 dark:hover:text-primary-400">
                 <svg class="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
@@ -513,10 +528,11 @@ import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'v
 import { useIntervalFn } from '@vueuse/core'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import ReauthProfileSelect from '@/components/account/ReauthProfileSelect.vue'
+import OneClickAuthProgress from '@/components/account/OneClickAuthProgress.vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { listReauthProfiles, runOneClickAuth, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import { listReauthProfiles, runOneClickAuth, type AuthorizationStage, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { adminAPI } from '@/api/admin'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
@@ -2381,34 +2397,56 @@ const handleSchedule = async (a: Account) => {
 }
 const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
 const authOpening = reactive(new Set<number>())
+interface AuthTask {
+  id: number; title: string; stage: AuthorizationStage; status: 'running' | 'succeeded' | 'failed'
+  startedAt: number; finishedAt?: number; error?: string
+}
+const authTasks = reactive(new Map<number, AuthTask>())
+const authControllers = new Map<number, AbortController>()
+const showAuthTasks = ref(true)
+const batchAuthTotal = ref(0), batchAuthCompleted = ref(0)
+let authTasksDisposed = false
 const handleReAuth = (a: Account) => { reAuthAcc.value = a; showReAuth.value = true }
 async function handleOneClickAuth(a: AccountListItem) {
-  if (authOpening.has(a.id)) return
+  if (authOpening.has(a.id) || authTasksDisposed) return
   authOpening.add(a.id)
+  showAuthTasks.value = true
+  const controller = new AbortController()
+  authControllers.set(a.id, controller)
+  authTasks.set(a.id, { id: a.id, title: a.name, stage: 'preparing', status: 'running', startedAt: Date.now() })
+  const task = authTasks.get(a.id)!
   try {
-    await runOneClickAuth(a.id)
+    await runOneClickAuth(a.id, progress => { task.stage = progress.stage }, controller.signal)
+    task.status = 'succeeded'
     appStore.showSuccess(t('admin.accounts.reAuthorizedSuccess'))
     reload()
   } catch (e: any) {
+    if (controller.signal.aborted) return
     const details = e?.response?.data || e
     const message = details?.message || e?.message || t('admin.accounts.authProfiles.failed')
     const retryHint = details?.metadata?.retryable === 'true' ? t('admin.accounts.authProfiles.retryable') : t('admin.accounts.authProfiles.notRetryable')
-    appStore.showError(details?.reason ? `${message} (${details.reason}) · ${retryHint}` : message)
+    task.status = 'failed'
+    const taskError = String(details?.reason ? `${message} (${details.reason}) · ${retryHint}` : message)
+    task.error = taskError
+    appStore.showError(taskError)
   }
-  finally { authOpening.delete(a.id) }
+  finally { task.finishedAt = Date.now(); authOpening.delete(a.id); authControllers.delete(a.id) }
 }
 const batchAuthBusy = ref(false)
 async function batchOneClickAuth() {
   if (batchAuthBusy.value) return
   batchAuthBusy.value = true
   const ids = [...selIds.value]
+  batchAuthTotal.value = ids.length; batchAuthCompleted.value = 0
   try {
     // Serialize tasks so shared inboxes and the runner concurrency limit are respected.
     for (const id of ids) {
+      if (authTasksDisposed) break
       try {
         const account = await adminAPI.accounts.getById(id)
         if (canOneClickAuthorize(account)) await handleOneClickAuth(account)
       } catch (e: any) { appStore.showError(e?.message || t('admin.accounts.authProfiles.failed')) }
+      finally { batchAuthCompleted.value++ }
     }
   } finally { batchAuthBusy.value = false }
 }
@@ -2665,6 +2703,9 @@ onMounted(async () => {
 })
 
 onUnmounted(() => {
+  authTasksDisposed = true
+  authControllers.forEach(controller => controller.abort())
+  authControllers.clear()
   upstreamBillingRateAbortController?.abort()
   if (usageBatchFlushTimer !== null) {
     clearTimeout(usageBatchFlushTimer)

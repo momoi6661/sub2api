@@ -44,3 +44,11 @@ proceeds to normal creation with the chosen account options, profile binding and
 automatic recovery off. Canceling aborts the draft request; failed creation retains
 credentials for retry while the dialog is open. Draft scripts receive accountId 0.
 Refreshing the profile list hides any revealed passwords.
+
+One-click actions immediately show a spinner and an authorization task panel.
+Stages arrive on the running request as newline-delimited JSON; no polling or
+persistent background task is added. Show actual profile, connection, execution,
+verification and save stages with elapsed seconds, never an invented percentage.
+Keep completed tasks and structured errors visible until dismissed. Batch progress
+counts processed accounts, including failures and unsupported accounts. Creation
+uses the same stage display and retains credentials if account creation fails.

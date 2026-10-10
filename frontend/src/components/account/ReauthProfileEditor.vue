@@ -5,6 +5,7 @@
       <div><label for="auth-profile-name" class="input-label">{{ t('admin.accounts.authProfiles.name') }}</label><input id="auth-profile-name" v-model="form.name" class="input" required maxlength="120" /></div>
       <label class="flex items-center gap-2"><input v-model="form.enabled" type="checkbox" />{{ t('admin.accounts.authProfiles.enabled') }}</label>
       <div><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" :required="form.mailbox_mode !== 'api' || form.api_result_type !== 'auth_file'" /></div>
+      <p v-if="form.mailbox_mode === 'imap' || form.api_result_type !== 'auth_file'" class="input-hint">{{ t('admin.accounts.authProfiles.mailboxHint') }}</p>
       <div><label for="auth-profile-mode" class="input-label">{{ t('admin.accounts.authProfiles.mode') }}</label><select id="auth-profile-mode" v-model="form.mailbox_mode" class="input"><option value="imap">IMAP (TLS)</option><option value="api">HTTPS API</option></select></div>
       <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label for="auth-profile-host" class="input-label">{{ t('admin.accounts.authProfiles.host') }}</label><input id="auth-profile-host" v-model="form.imap_host" class="input" required /></div>

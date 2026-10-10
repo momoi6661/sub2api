@@ -56,12 +56,13 @@ func (h *AccountHandler) RunOneClickAuth(c *gin.Context) {
 		response.BadRequest(c, "Invalid account ID")
 		return
 	}
-	account, err := h.authorizeOneClick(c.Request.Context(), id)
+	ctx := startAuthProgress(c)
+	account, err := h.authorizeOneClick(ctx, id)
 	if err != nil {
-		writeReauthError(c, err)
+		finishAuthRequest(c, nil, err)
 		return
 	}
-	response.Success(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account))
+	finishAuthRequest(c, h.buildAccountResponseWithRuntime(c.Request.Context(), account), nil)
 }
 
 func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*service.Account, error) {
@@ -113,6 +114,7 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] {
 		return nil, &service.ReauthExecutionError{Code: "ACCOUNT_CHANGED", Message: "Account credentials or authorization binding changed during this task"}
 	}
+	authProgress(ctx, "saving")
 	return h.applyOAuthCredentials(ctx, id, payload)
 }
 
@@ -139,20 +141,20 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 		writeReauthError(c, &service.ReauthExecutionError{Code: "RUNNER_NOT_CONFIGURED", Message: "Authorization settings unavailable"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(c.Request.Context(), 135*time.Second)
+	ctx, cancel := context.WithTimeout(startAuthProgress(c), 135*time.Second)
 	defer cancel()
 	// Keep email out of lock keys, and prevent repeat requests for the same draft.
 	digest := sha256.Sum256([]byte(input.ProfileID + "\x00" + strings.ToLower(input.LoginEmail)))
 	key := fmt.Sprintf("one_click_auth_draft:%x", digest)
 	if _, loaded := oneClickAccountLocks.LoadOrStore(key, true); loaded {
-		writeReauthError(c, &service.ReauthExecutionError{Code: "TASK_ALREADY_RUNNING", Message: "This email already has an authorization task"})
+		finishAuthRequest(c, nil, &service.ReauthExecutionError{Code: "TASK_ALREADY_RUNNING", Message: "This email already has an authorization task"})
 		return
 	}
 	defer oneClickAccountLocks.Delete(key)
 	if h.reauthLocks != nil {
 		var nonce [16]byte
 		if _, err := rand.Read(nonce[:]); err != nil {
-			writeReauthError(c, err)
+			finishAuthRequest(c, nil, err)
 			return
 		}
 		owner := hex.EncodeToString(nonce[:])
@@ -162,7 +164,7 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 			if err != nil {
 				execution = &service.ReauthExecutionError{Code: "TASK_LOCK_UNAVAILABLE", Message: "Authorization task lock unavailable", Retryable: true}
 			}
-			writeReauthError(c, execution)
+			finishAuthRequest(c, nil, execution)
 			return
 		}
 		defer func() {
@@ -176,14 +178,15 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	}}
 	payload, err := h.authorizeReauthProfile(ctx, draft)
 	if err != nil {
-		writeReauthError(c, err)
+		finishAuthRequest(c, nil, err)
 		return
 	}
-	response.Success(c, payload)
+	finishAuthRequest(c, payload, nil)
 }
 
 // Shared execution keeps draft and existing-account authorization rules identical.
 func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *service.Account) (*ApplyOAuthCredentialsRequest, error) {
+	authProgress(ctx, "configuration")
 	profileID := codexCredentialString(account.Extra, "one_click_auth_profile_id")
 	profiles, err := h.reauthSettings.ListReauthProfiles(ctx)
 	if err != nil {
@@ -223,6 +226,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	}
 
 	var sessionID string
+	authProgress(ctx, "connecting")
 	proxyID, err := chooseReauthProxy(profile, account.ProxyID)
 	if err != nil {
 		return nil, err
@@ -256,11 +260,17 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 		task.Context["proxyURL"] = task.ProxyURL
 	}
 
+	if resultType == "auth_file" {
+		authProgress(ctx, "authorization_file")
+	} else {
+		authProgress(ctx, "browser_authorization")
+	}
 	result, err := service.ExecuteReauthRunner(ctx, task)
 	if err != nil {
 		return nil, err
 	}
 	var payload *ApplyOAuthCredentialsRequest
+	authProgress(ctx, "verifying")
 	if resultType == "auth_file" {
 		content := string(result.Auth)
 		var text string

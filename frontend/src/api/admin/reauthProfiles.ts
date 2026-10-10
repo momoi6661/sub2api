@@ -60,8 +60,48 @@ export async function applyReauthFile(accountID: number, content: string): Promi
   return data
 }
 
-export async function runOneClickAuth(accountID: number): Promise<Account> {
-  const { data } = await apiClient.post<Account>(`/admin/accounts/${accountID}/one-click-auth`, {}, { timeout: 145_000 })
+export type AuthorizationStage = 'preparing' | 'configuration' | 'connecting' | 'browser_authorization' | 'authorization_file' | 'verifying' | 'saving'
+export interface AuthorizationProgress { event: 'progress'; stage: AuthorizationStage }
+export type ProgressCallback = (progress: AuthorizationProgress) => void
+
+// Use the existing client/interceptors so streamed tasks retain login refresh,
+// admin request headers, structured errors and cancellation behavior.
+function authorizationRequestConfig(onProgress?: ProgressCallback, signal?: AbortSignal) {
+  if (!onProgress) return { timeout: 145_000, signal }
+  let offset = 0
+  function consume(text: string) {
+    while (true) {
+      const newline = text.indexOf('\n', offset)
+      if (newline < 0) break
+      const line = text.slice(offset, newline).trim()
+      offset = newline + 1
+      if (!line) continue
+      try {
+        const event = JSON.parse(line)
+        if (event.event === 'progress') onProgress?.(event)
+      } catch { /* An interrupted frame is handled by the final response parser. */ }
+    }
+  }
+  return {
+    timeout: 145_000, signal, adapter: 'xhr' as const, responseType: 'text' as const,
+    params: { stream: '1' },
+    onDownloadProgress: (progress: { event?: ProgressEvent }) => {
+      const request = progress.event?.target
+      if (request instanceof XMLHttpRequest) consume(request.responseText)
+    },
+    transformResponse: [(text: string) => {
+      consume(text)
+      const last = text.trim().split('\n').pop()
+      if (!last) throw new Error('Authorization stream ended without a result')
+      const result = JSON.parse(last)
+      if (typeof result.code !== 'number') throw new Error('Authorization stream ended without a result')
+      return result
+    }]
+  }
+}
+
+export async function runOneClickAuth(accountID: number, onProgress?: ProgressCallback, signal?: AbortSignal): Promise<Account> {
+  const { data } = await apiClient.post<Account>(`/admin/accounts/${accountID}/one-click-auth`, {}, authorizationRequestConfig(onProgress, signal))
   return data
 }
 
@@ -72,11 +112,11 @@ export interface NewAccountAuthorization {
 }
 
 export async function authorizeNewAccount(
-  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal
+  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal, onProgress?: ProgressCallback
 ): Promise<NewAccountAuthorization> {
   const { data } = await apiClient.post<NewAccountAuthorization>('/admin/accounts/one-click-auth', {
     profile_id: profileID, login_email: loginEmail, proxy_id: proxyID
-  }, { timeout: 145_000, signal })
+  }, authorizationRequestConfig(onProgress, signal))
   return data
 }
 

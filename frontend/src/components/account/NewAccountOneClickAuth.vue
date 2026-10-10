@@ -15,7 +15,7 @@
       <input id="new-account-auth-email" v-model="loginEmail" class="input" type="email" required maxlength="254" autocomplete="email" :disabled="busy" placeholder="name@example.com" />
     </div>
     <p class="input-hint">{{ t('admin.accounts.authProfiles.browser') }}</p>
-    <p v-if="authorizing" role="status" class="text-sm text-primary-600 dark:text-primary-400">{{ t('admin.accounts.oneClickAuth.authorizing') }}</p>
+    <OneClickAuthProgress v-if="taskStartedAt" :stage="submitting ? 'saving' : taskStage" :status="busy ? 'running' : error ? 'failed' : 'ready'" :started-at="taskStartedAt" :finished-at="busy ? undefined : taskFinishedAt" :error="error && errorCode ? `${errorCode} · ${t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable')}` : undefined" />
     <p v-if="authorization" role="status" class="text-sm text-green-600 dark:text-green-400">{{ t('admin.accounts.oneClickAuth.readyToCreate') }}</p>
     <div v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
       <p>{{ error }}</p>
@@ -35,7 +35,8 @@ import { useI18n } from 'vue-i18n'
 import Icon from '@/components/icons/Icon.vue'
 import ReauthProfileSelect from './ReauthProfileSelect.vue'
 import ReauthProfileEditor from './ReauthProfileEditor.vue'
-import { authorizeNewAccount, listReauthProfiles, type NewAccountAuthorization, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import OneClickAuthProgress from './OneClickAuthProgress.vue'
+import { authorizeNewAccount, listReauthProfiles, type AuthorizationStage, type NewAccountAuthorization, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { extractApiErrorCode, extractApiErrorMessage, extractApiErrorMetadata } from '@/utils/apiError'
 
 const props = defineProps<{ proxyID: number | null; submitting: boolean }>()
@@ -46,6 +47,8 @@ const profileID = ref(''), loginEmail = ref('')
 const loading = ref(false), authorizing = ref(false), showEditor = ref(false)
 const loadError = ref(''), error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const authorization = shallowRef<NewAccountAuthorization | null>(null)
+const taskStartedAt = ref(0), taskFinishedAt = ref<number | undefined>()
+const taskStage = ref<AuthorizationStage>('preparing')
 const busy = computed(() => authorizing.value || props.submitting)
 const selectedEnabled = computed(() => profiles.value.some(p => p.id === profileID.value && p.enabled))
 let controller: AbortController | null = null
@@ -55,7 +58,9 @@ watch([profileID, loginEmail, () => props.proxyID], () => {
   controller?.abort()
   authorization.value = null
   error.value = ''; errorCode.value = ''
+  taskStartedAt.value = 0
 })
+watch(() => props.submitting, value => { if (!value && taskStartedAt.value) taskFinishedAt.value = Date.now() })
 
 async function loadProfiles() {
   loading.value = true; loadError.value = ''
@@ -74,13 +79,17 @@ async function authorize() {
   const selectedProfile = profileID.value, email = loginEmail.value.trim()
   const taskController = new AbortController()
   controller = taskController
+  taskStartedAt.value = Date.now(); taskFinishedAt.value = undefined; taskStage.value = 'preparing'
   authorizing.value = true; error.value = ''; errorCode.value = ''
   try {
     if (!authorization.value) {
-      const result = await authorizeNewAccount(selectedProfile, email, props.proxyID, taskController.signal)
+      const result = await authorizeNewAccount(selectedProfile, email, props.proxyID, taskController.signal, progress => {
+        if (!disposed && !taskController.signal.aborted) taskStage.value = progress.stage
+      })
       if (disposed || taskController.signal.aborted) return
       authorization.value = result
     }
+    taskStage.value = 'verifying'
     if (!disposed && !taskController.signal.aborted) {
       // Retain the result if creation fails, so retrying does not repeat OAuth.
       emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email)
@@ -93,6 +102,7 @@ async function authorize() {
     }
   } finally {
     authorizing.value = false
+    taskFinishedAt.value = Date.now()
     if (controller === taskController) controller = null
   }
 }

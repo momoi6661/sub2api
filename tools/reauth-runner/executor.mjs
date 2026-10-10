@@ -53,7 +53,8 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
     }
     const proxy = task.proxyURL ? new URL(task.proxyURL) : null
     report('browser_start')
-    browser = await chromium.launch({ headless: true })
+    // Xvfb provides a display for headful Chromium on servers without a desktop.
+    browser = await chromium.launch({ headless: false })
     if (signal?.aborted) return interrupted(signal)
     const context = await browser.newContext({ locale: 'en-US', extraHTTPHeaders: {
       'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7'

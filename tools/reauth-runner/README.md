@@ -2,7 +2,9 @@
 
 API code can return an OAuth file without a browser, using Node's HTTP fetch.
 Email-code login uses a fresh Playwright Chromium context per account. No desktop
-or preinstalled Chrome is required; the Dockerfile installs headless Chromium.
+or preinstalled Chrome is required; the Dockerfile installs Chromium and runs
+it headfully inside Xvfb without requiring a physical desktop. CAPTCHA and
+other manual verification still stop the task; this does not guarantee access.
 Password, CAPTCHA, passkey and unsupported MFA return `MANUAL_REQUIRED`.
 
 Run this optional service separately from Sub2API. Set `REAUTH_RUNNER_TOKEN` to a

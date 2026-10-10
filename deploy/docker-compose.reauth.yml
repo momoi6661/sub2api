@@ -27,3 +27,5 @@ services:
     environment:
       BIND_HOST: 0.0.0.0
       REAUTH_RUNNER_TOKEN: ${REAUTH_RUNNER_TOKEN:?Set a random token of at least 32 characters}
+    networks:
+      - sub2api-network

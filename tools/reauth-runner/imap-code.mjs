@@ -40,7 +40,7 @@ export async function executeMailbox(task) {
     await client.mailboxOpen(config.folder || 'INBOX', { readOnly: true })
     if (task.operation === 'mailbox_snapshot') return { type: 'mailbox_snapshot', uidNext: client.mailbox.uidNext, uidValidity: String(client.mailbox.uidValidity) }
     if (String(client.mailbox.uidValidity) !== config.uidValidity) return error('MAILBOX_CHANGED', 'Mailbox was reset during this authorization task')
-    const configuredSeconds = Number.parseInt(process.env.MAILBOX_WAIT_SECONDS || '60', 10)
+    const configuredSeconds = Number.parseInt(String(config.waitSeconds || process.env.MAILBOX_WAIT_SECONDS || '60'), 10)
     const waitSeconds = Number.isFinite(configuredSeconds) ? Math.min(180, Math.max(30, configuredSeconds)) : 60
     const deadline = Date.now() + waitSeconds * 1000
     while (Date.now() < deadline) {

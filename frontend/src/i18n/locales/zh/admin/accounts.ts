@@ -364,6 +364,8 @@ export default {
         pattern: "验证码正则（一个捕获组）",
         proxy: "授权代理池",
         loginEmail: "此账号的登录邮箱",
+        waitSeconds: "验证码等待时间（秒）",
+        waitHint: "默认 60 秒，可设置 30–90 秒；等待 30 秒未收到时重发一次。",
         isolation: "只读取任务开始后的新邮件，按此账号登录邮箱和收件人匹配；发件人筛选填写完整邮箱，可留空。不会删除邮件或标为已读。",
         pending: "授权任务在服务器运行，需要部署一键授权执行器。IMAP / API 协议读取验证码，协议登录并获取授权文件。",
         description: "管理共享总邮箱或专用邮箱配置，再在账号中绑定。关闭自动开关不会清除绑定。",
@@ -379,6 +381,7 @@ export default {
         auto: "授权失效后自动执行（默认关闭）",
       },
       authorizationTasks: {
+        batchDelete: '删除已选（{count}）', selectTask: '选择任务 #{id}', batchDeleteFailed: '{count} 条记录删除失败，已保留选择，可重试。',
         submit: '提交一键授权', existingHint: '已带入此账号的登录邮箱和绑定配置。确认后提交授权，任务将保存到「授权任务」，新凭据会更新到此账号。',
         title: '授权任务', description: '持续保存手动、批量和自动授权记录。已有账号的任务在切换页面后继续执行。',
         search: '搜索账号、登录邮箱、配置、任务编号或错误代码', count: '共 {count} 条记录',
@@ -391,6 +394,8 @@ export default {
         statuses: { queued: '排队中', running: '执行中', succeeded: '授权成功', ready: '凭据已获取', failed: '执行失败', cancelled: '已中断' },
         sources: { manual: '手动授权', batch: '批量授权', automatic: '失效自动授权', new_account: '新增账号授权' },
         errors: {
+          PROXY_CONNECTION_FAILED: "代理连接失败或超时，请检查选定代理的地址和连通性。",
+          PROXY_AUTH_FAILED: "代理认证失败，请检查代理用户名和密码。",
           MAILBOX_CONNECTION_FAILED: '无法登录或读取收件邮箱。检查主机、文件夹和邮箱密码；Gmail 请使用应用专用密码。此步骤失败时尚未进入发送验证码流程。',
           MAILBOX_SNAPSHOT_FAILED: '无法记录收件邮箱状态，尚未开始账号登录。检查收件邮箱配置。',
           MAILBOX_TIMEOUT: "已进入邮箱验证码步骤，但没有读到匹配任务邮箱的新邮件。检查收件人、转发规则、垃圾邮件和文件夹。",

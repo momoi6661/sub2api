@@ -247,7 +247,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	}}
 	task.OnProgress = func(stage string) { authProgress(ctx, stage) }
 	if profile.MailboxMode == "imap" {
-		task.Mailbox = &service.ReauthRunnerMailbox{Host: profile.IMAPHost, Port: profile.IMAPPort, Username: profile.IMAPUsername, Folder: profile.Folder, SenderFilter: profile.SenderFilter, CodePattern: profile.CodePattern}
+		task.Mailbox = &service.ReauthRunnerMailbox{Host: profile.IMAPHost, Port: profile.IMAPPort, Username: profile.IMAPUsername, Folder: profile.Folder, SenderFilter: profile.SenderFilter, CodePattern: profile.CodePattern, WaitSeconds: profile.MailboxWaitSeconds}
 		// Google displays app passwords in groups; spaces are not part of the password.
 		if strings.EqualFold(profile.IMAPHost, "imap.gmail.com") {
 			task.Context["secret"] = strings.ReplaceAll(material["secret"], " ", "")
@@ -255,7 +255,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	}
 
 	authProgress(ctx, "connecting")
-	proxyID, err := chooseReauthProxy(profile, account.ProxyID)
+	proxyID, err := chooseReauthAccountProxy(profile, account)
 	if err != nil {
 		return nil, err
 	}
@@ -322,6 +322,14 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 }
 
 // Pick once per task; OAuth login and token exchange must share the same route.
+func chooseReauthAccountProxy(profile *service.ReauthProfile, account *service.Account) (*int64, error) {
+	// The draft selector is authoritative, including nil for a direct route.
+	if account.ID == 0 {
+		return account.ProxyID, nil
+	}
+	return chooseReauthProxy(profile, account.ProxyID)
+}
+
 func chooseReauthProxy(profile *service.ReauthProfile, fallback *int64) (*int64, error) {
 	if len(profile.ProxyIDs) == 0 {
 		if profile.ProxyID != nil {

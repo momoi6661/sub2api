@@ -63,6 +63,9 @@ Run `npm test` for local protocol-flow tests; they do not contact the provider.
 
 Authorization profiles can hold a proxy pool. The backend chooses one proxy per
 account task and keeps it for protocol login, script fetch, and token exchange.
+New-account authorization honors the form proxy selector: an empty selection
+connects directly instead of choosing a profile proxy. SOCKS5 destinations use
+proxy-side DNS resolution.
 Script fetch uses the selected HTTP, HTTPS, or SOCKS proxy; custom networking
 outside fetch is the script author's responsibility. Empty pools use the account
 proxy. A proxy failure ends this task instead of silently switching routes.
@@ -72,7 +75,9 @@ UIDNEXT and UIDVALIDITY. It only reads new UIDs after that snapshot, checks the
 server delivery time against task start, and matches To/Cc/Delivered-To/X-Original-To
 against the account login email. Optional sender filtering is an exact email
 address. The selected OAuth proxy does not route the IMAP mailbox connection.
-IMAP waiting defaults to 60 seconds (`MAILBOX_WAIT_SECONDS`, 30–180 seconds),
+IMAP waiting uses the authorization profile `mailbox_wait_seconds` (default
+60, configurable from 30 to 90 seconds). Older clients fall back to
+`MAILBOX_WAIT_SECONDS` (default 60),
 subject to the overall 120-second authorization deadline. The IMAP child has a
 190-second limit so it cannot truncate that wait at the script default of 30
 seconds. Custom code scripts retain their 30-second deadline. Reading does not

@@ -17,6 +17,7 @@ export interface ReauthProfile {
   folder: string
   sender_filter: string
   code_pattern: string
+  mailbox_wait_seconds?: number
   proxy_id: number | null
   proxy_ids?: number[]
   secret?: string

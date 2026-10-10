@@ -84,6 +84,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       })
       for (const cookie of response.headers.raw()['set-cookie'] || []) await jar.setCookie(cookie, url.href)
       const text = await response.text()
+      if (task.proxyURL && response.status === 407) reject('PROXY_AUTH_FAILED', 'The selected proxy rejected its authentication credentials')
       if (response.headers.get('cf-mitigated') === 'challenge' || /just a moment|checking your browser|verify you are human|challenges\.cloudflare\.com/i.test(text)) {
         const result = failure('PROVIDER_SECURITY_CHALLENGE', 'The authorization provider returned a security challenge; email-code login has not completed')
         result.error.httpStatus = response.status
@@ -136,7 +137,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
     if (!step.code) {
       phase = 'EMAIL_SUBMIT_FAILED'
       report('email_login')
-      step = await post('/api/accounts/authorize/continue', { username: { value: task.context.loginEmail, kind: 'email' }, screen_hint: 'login' }, step.url)
+      step = await post('/api/accounts/authorize/continue', { username: { value: task.context.loginEmail, kind: 'email' } }, step.url)
       let target = nextURL(step.data)
       if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not return a supported login step')
       checkStep(new URL(target, origin), step.data.page?.type || '')
@@ -247,6 +248,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         ? failure('AUTH_TIMEOUT', 'Authorization exceeded its deadline', true) : failure('TASK_CANCELLED', 'Task cancelled')
     }
     // Never include provider response bodies, callback URLs or cookies in errors.
+    if (error.code === 'PROXY_CONNECTION_FAILED') return failure(error.code, 'Connection through the selected proxy failed or timed out', true)
     return error.result || failure(phase, 'Protocol authorization failed at this step; check the proxy and provider response', true)
   } finally { transport?.close() }
 }

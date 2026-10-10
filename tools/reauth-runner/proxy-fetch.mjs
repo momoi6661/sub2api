@@ -2,9 +2,11 @@ import fetch from 'node-fetch'
 import { HttpProxyAgent } from 'http-proxy-agent'
 import { HttpsProxyAgent } from 'https-proxy-agent'
 import { SocksProxyAgent } from 'socks-proxy-agent'
+import { normalizeProxyURL } from './proxy-url.mjs'
 
 // Each task keeps its selected route for login, scripts and token exchange.
 export function createProxyFetch(proxyURL) {
+  proxyURL = normalizeProxyURL(proxyURL)
   let agent
   let agents = []
   if (proxyURL) {

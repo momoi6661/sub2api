@@ -23,25 +23,26 @@ const reauthProfilePrefix = "one_click_auth_profile."
 // ReauthProfile describes a shared inbox, not the upstream account's login identity.
 // List responses omit secrets; explicit administrator reads decrypt them on demand.
 type ReauthProfile struct {
-	ID             string  `json:"id"`
-	Name           string  `json:"name"`
-	Enabled        bool    `json:"enabled"`
-	MailboxMode    string  `json:"mailbox_mode"`
-	APIResultType  string  `json:"api_result_type"`
-	MailboxAddress string  `json:"mailbox_address"`
-	IMAPHost       string  `json:"imap_host"`
-	IMAPPort       int     `json:"imap_port"`
-	IMAPUsername   string  `json:"imap_username"`
-	APIURL         string  `json:"api_url"`
-	CodeScript     string  `json:"code_script,omitempty"`
-	HasCodeScript  bool    `json:"has_code_script"`
-	Folder         string  `json:"folder"`
-	SenderFilter   string  `json:"sender_filter"`
-	CodePattern    string  `json:"code_pattern"`
-	ProxyID        *int64  `json:"proxy_id"`
-	ProxyIDs       []int64 `json:"proxy_ids"`
-	Secret         string  `json:"secret,omitempty"`
-	HasSecret      bool    `json:"has_secret"`
+	ID                 string  `json:"id"`
+	Name               string  `json:"name"`
+	Enabled            bool    `json:"enabled"`
+	MailboxMode        string  `json:"mailbox_mode"`
+	APIResultType      string  `json:"api_result_type"`
+	MailboxAddress     string  `json:"mailbox_address"`
+	IMAPHost           string  `json:"imap_host"`
+	IMAPPort           int     `json:"imap_port"`
+	IMAPUsername       string  `json:"imap_username"`
+	APIURL             string  `json:"api_url"`
+	CodeScript         string  `json:"code_script,omitempty"`
+	HasCodeScript      bool    `json:"has_code_script"`
+	Folder             string  `json:"folder"`
+	SenderFilter       string  `json:"sender_filter"`
+	CodePattern        string  `json:"code_pattern"`
+	MailboxWaitSeconds int     `json:"mailbox_wait_seconds"`
+	ProxyID            *int64  `json:"proxy_id"`
+	ProxyIDs           []int64 `json:"proxy_ids"`
+	Secret             string  `json:"secret,omitempty"`
+	HasSecret          bool    `json:"has_secret"`
 }
 
 type storedReauthProfile struct {
@@ -64,6 +65,9 @@ func (s *SettingService) ListReauthProfiles(ctx context.Context) ([]ReauthProfil
 		if err := json.Unmarshal([]byte(value), &stored); err != nil {
 			return nil, fmt.Errorf("decode authorization profile: %w", err)
 		}
+		if stored.MailboxWaitSeconds == 0 {
+			stored.MailboxWaitSeconds = 60
+		}
 		stored.Secret = ""
 		stored.CodeScript = ""
 		stored.HasCodeScript = stored.EncryptedScript != ""
@@ -82,6 +86,12 @@ func validReauthProfileID(id string) bool {
 func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profile ReauthProfile) (*ReauthProfile, error) {
 	bad := func(message string) (*ReauthProfile, error) {
 		return nil, infraerrors.BadRequest("INVALID_AUTH_PROFILE", message)
+	}
+	if profile.MailboxWaitSeconds == 0 {
+		profile.MailboxWaitSeconds = 60
+	}
+	if profile.MailboxWaitSeconds < 30 || profile.MailboxWaitSeconds > 90 {
+		return bad("mailbox wait must be between 30 and 90 seconds")
 	}
 	profile.Name = strings.TrimSpace(profile.Name)
 	profile.MailboxAddress = strings.TrimSpace(profile.MailboxAddress)

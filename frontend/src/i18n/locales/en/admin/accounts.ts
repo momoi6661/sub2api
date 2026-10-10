@@ -565,6 +565,8 @@ export default {
         pattern: "Code regex (one capture group)",
         proxy: "Authorization proxy pool",
         loginEmail: "Account login email",
+        waitSeconds: "Verification email wait (seconds)",
+        waitHint: "Default 60 seconds, range 30–90. Resend once after 30 seconds if still waiting.",
         isolation: "Only new messages after task start matching this account login recipient are read. Sender filter accepts one full email address or may be empty. Messages are neither deleted nor marked read.",
         pending: "Tasks run on the server and require the authorization runner. IMAP/API protocols read the code; protocol login produces an authorization file.",
         description: "Manage shared or dedicated mailbox profiles and bind them to accounts. Turning automation off preserves the binding.",
@@ -580,6 +582,7 @@ export default {
         auto: "Automatically authorize on auth failure (off by default)",
       },
       authorizationTasks: {
+        batchDelete: 'Delete selected ({count})', selectTask: 'Select task #{id}', batchDeleteFailed: 'Failed to delete {count} records. They remain selected for retry.',
         submit: 'Submit authorization', existingHint: 'The account login email and bound profile are prefilled. Confirm to submit a recorded task that updates this account with the new credentials.',
         title: 'Authorization tasks', description: 'Persistent history for manual, batch and automatic authorization. Existing-account tasks continue after navigation.',
         search: 'Search account, login email, profile, task ID or error code', count: '{count} records',
@@ -592,6 +595,8 @@ export default {
         statuses: { queued: 'Queued', running: 'Running', succeeded: 'Authorized', ready: 'Credentials obtained', failed: 'Failed', cancelled: 'Cancelled' },
         sources: { manual: 'Manual', batch: 'Batch', automatic: 'Automatic recovery', new_account: 'New account' },
         errors: {
+          PROXY_CONNECTION_FAILED: "Connection through the selected proxy failed or timed out. Check its address and connectivity.",
+          PROXY_AUTH_FAILED: "Proxy authentication failed. Check the proxy username and password.",
           MAILBOX_CONNECTION_FAILED: 'Mailbox login or reading failed. Check the host, folder and password; Gmail requires an app password. Code delivery has not started if this initial step fails.',
           MAILBOX_SNAPSHOT_FAILED: 'Could not record mailbox state. Account login has not started; check the receiving mailbox.',
           MAILBOX_TIMEOUT: "Email verification was reached but no new message matched the task email. Check recipient headers, forwarding, spam and folder settings.",

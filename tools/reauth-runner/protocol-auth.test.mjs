@@ -34,7 +34,7 @@ function provider(options = {}) {
     assert.match(init.headers.Cookie || '', /login_session=fresh/)
     if (init.method === 'POST' && url.pathname.startsWith('/api/')) assert.equal(init.headers.Origin, origin)
     if (url.pathname === '/api/accounts/authorize/continue') {
-      assert.deepEqual(JSON.parse(init.body).username, { value: 'owner@example.com', kind: 'email' })
+      assert.deepEqual(JSON.parse(init.body), { username: { value: 'owner@example.com', kind: 'email' } })
       if (options.signup) return json({ continue_url: '/about-you' })
       if (options.pageType) return json({ page: { type: options.pageType } })
       if (options.sentinel) return json({ error: { code: 'sentinel_required' } })
@@ -107,6 +107,21 @@ test('API code -> isolated cookies -> PKCE -> one authorization file', async () 
   assert.equal(auth.expires_at, auth.expired, 'panel importer must receive its supported expiry field')
   assert.equal(mock.reads.length, 1)
   assert.deepEqual(mock.stages, ['protocol_start', 'email_login', 'requesting_code', 'waiting_code', 'submitting_code', 'token_exchange'])
+})
+
+test('proxy failures stop login without leaking credentials or reading codes', async () => {
+  const task = { ...makeTask(), proxyURL: 'http://user:private-password@proxy.example:8080' }
+  let reads = 0
+  const reader = async () => { reads++; return { type: 'code', code: '123456' } }
+  for (const fetch of [
+    async () => new Response('', { status: 407 }),
+    async () => { throw Object.assign(new Error(task.proxyURL), { code: 'PROXY_CONNECTION_FAILED' }) }
+  ]) {
+    const result = await authorizeWithProtocol(task, reader, undefined, undefined, fetch)
+    assert.match(result.error.code, /^PROXY_(AUTH|CONNECTION)_FAILED$/)
+    assert.doesNotMatch(result.error.message, /private-password/)
+  }
+  assert.equal(reads, 0)
 })
 
 test('IMAP captures a new UID boundary before protocol login', async () => {

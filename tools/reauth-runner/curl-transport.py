@@ -21,8 +21,9 @@ def emit(value: dict[str, Any]) -> None:
 
 
 def main() -> None:
-    session = requests.Session(impersonate="chrome")
+    session = requests.Session(impersonate="chrome", trust_env=False)
     for line in sys.stdin:
+        item = {}
         try:
             item = json.loads(line)
             proxy = item.get("proxy") or ""
@@ -57,7 +58,9 @@ def main() -> None:
                 "body": body64,
             })
         except Exception as exc:
-            emit({"id": item.get("id"), "error": f"{type(exc).__name__}: {exc}"})
+            proxy_error = bool(item.get("proxy")) and getattr(exc, "code", None) in (5, 7, 28, 56, 97)
+            emit({"id": item.get("id"), "error": "Transport request failed",
+                  "errorCode": "PROXY_CONNECTION_FAILED" if proxy_error else "PROTOCOL_CONNECTION_FAILED"})
 
 
 if __name__ == "__main__":

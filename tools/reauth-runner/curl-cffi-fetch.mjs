@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { normalizeProxyURL } from './proxy-url.mjs'
 
 function responseFrom(payload) {
   const headers = new Map(Object.entries(payload.headers || {}))
@@ -17,6 +18,7 @@ function responseFrom(payload) {
 }
 
 export function createCurlCffiFetch(proxyURL = '') {
+  proxyURL = normalizeProxyURL(proxyURL)
   const python = process.env.CURL_CFFI_PYTHON || (process.platform === 'win32' ? 'python' : 'python3')
   const child = spawn(python, [fileURLToPath(new URL('./curl-transport.py', import.meta.url))], {
     stdio: ['pipe', 'pipe', 'ignore'],
@@ -41,7 +43,7 @@ export function createCurlCffiFetch(proxyURL = '') {
         const waiter = pending.get(payload.id)
         if (!waiter) continue
         pending.delete(payload.id)
-        if (payload.error) waiter.reject(new Error(payload.error))
+        if (payload.error) waiter.reject(Object.assign(new Error('Authorization transport connection failed'), { code: payload.errorCode }))
         else waiter.resolve(responseFrom(payload))
       } catch (error) {
         failAll(error)

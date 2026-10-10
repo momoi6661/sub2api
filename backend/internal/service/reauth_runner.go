@@ -30,6 +30,7 @@ type ReauthRunnerMailbox struct {
 	Folder       string `json:"folder"`
 	SenderFilter string `json:"senderFilter"`
 	CodePattern  string `json:"codePattern"`
+	WaitSeconds  int    `json:"waitSeconds"`
 }
 
 type ReauthRunnerTask struct {

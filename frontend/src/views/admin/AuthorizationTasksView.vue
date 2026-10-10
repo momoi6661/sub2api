@@ -8,6 +8,7 @@
             <p class="mt-1 text-sm text-gray-500 dark:text-dark-400">{{ t(`${key}.description`) }}</p>
           </div>
           <div class="flex items-center gap-2">
+            <button class="btn btn-danger" :disabled="deleting || !selectedIDs.length" @click="removeSelected">{{ t(`${key}.batchDelete`, { count: selectedIDs.length }) }}</button>
             <RouterLink to="/admin/reauth-profiles" class="btn btn-secondary">{{ t('admin.accounts.authProfiles.title') }}</RouterLink>
             <button class="btn btn-secondary" :disabled="loading" :aria-label="t('common.refresh')" :title="t('common.refresh')" @click="load"><Icon name="refresh" size="md" :class="loading && 'animate-spin'" /></button>
           </div>
@@ -25,6 +26,8 @@
       </template>
       <template #table>
         <DataTable :columns="columns" :data="tasks" :loading="loading && !tasks.length" row-key="id" :expandable-actions="false">
+          <template #header-selection><input type="checkbox" :checked="allSelected" :disabled="deleting || !deletableTasks.length" :aria-label="t('common.selectAll')" @change="toggleAll" /></template>
+          <template #cell-selection="{ row }"><input type="checkbox" :checked="selectedIDs.includes(row.id)" :disabled="deleting || !canDelete(row)" :aria-label="t(`${key}.selectTask`, { id: row.id })" @change="toggleTask(row.id)" /></template>
           <template #cell-account_name="{ row }">
             <button class="max-w-72 text-left text-sm font-medium text-primary-600 hover:underline dark:text-primary-400" @click="open(row)"><span class="block truncate">{{ row.account_name || row.login_email || t(`${key}.newAccount`) }}</span></button>
             <p class="mt-1 max-w-72 truncate text-xs text-gray-500 dark:text-dark-400" :title="row.login_email">{{ row.login_email }} · #{{ row.id }}</p>
@@ -89,6 +92,12 @@ const { t, te } = useI18n()
 const route = useRoute(), router = useRouter()
 const tasks = ref<AuthorizationTask[]>([]), selected = ref<AuthorizationTask | null>(null)
 const total = ref(0), activeCount = ref(0), loading = ref(false), retrying = ref(false), stopping = ref(false)
+const selectedIDs = ref<number[]>([]), deleting = ref(false)
+const canDelete = (task: AuthorizationTask) => !['queued', 'running'].includes(task.status)
+const deletableTasks = computed(() => tasks.value.filter(canDelete))
+const allSelected = computed(() => deletableTasks.value.length > 0 && deletableTasks.value.every(task => selectedIDs.value.includes(task.id)))
+function toggleAll() { selectedIDs.value = allSelected.value ? [] : deletableTasks.value.map(task => task.id) }
+function toggleTask(id: number) { selectedIDs.value = selectedIDs.value.includes(id) ? selectedIDs.value.filter(value => value !== id) : [...selectedIDs.value, id] }
 const error = ref(''), detailError = ref(''), now = ref(Date.now())
 let refreshTimer: ReturnType<typeof setTimeout> | undefined, searchTimer: ReturnType<typeof setTimeout> | undefined
 let request: AbortController | undefined, disposed = false
@@ -98,6 +107,7 @@ const status = computed({ get: () => query('status'), set: value => { void route
 const page = computed(() => Math.max(1, Math.min(1000000, Number(query('page')) || 1)))
 const statusOptions = computed(() => [{ value: '', label: t('admin.accounts.authProfiles.allStatuses') }, ...['queued', 'running', 'succeeded', 'ready', 'failed', 'cancelled'].map(value => ({ value, label: t(`${key}.statuses.${value}`) }))])
 const columns = computed(() => [
+  { key: 'selection', label: '', width: '48px' },
   { key: 'account_name', label: t(`${key}.account`) }, { key: 'profile_name', label: t('admin.accounts.oneClickAuth.profile') },
   { key: 'status', label: t('common.status') }, { key: 'created_at', label: t(`${key}.createdAt`) }, { key: 'actions', label: t('common.actions') }
 ])
@@ -125,7 +135,7 @@ async function load() {
   try {
     const data = await listAuthorizationTasks({ q: search.value, status: status.value, page: page.value, page_size: 20 }, controller.signal)
     if (controller.signal.aborted || disposed) return
-    tasks.value = data.items; total.value = data.total; activeCount.value = data.active_count; now.value = Date.now()
+    tasks.value = data.items; selectedIDs.value = selectedIDs.value.filter(id => data.items.some(task => task.id === id && canDelete(task))); total.value = data.total; activeCount.value = data.active_count; now.value = Date.now()
     const id = Number(query('task'))
     if (id > 0) {
       const task = data.items.find(item => item.id === id) || await getAuthorizationTask(id, controller.signal)
@@ -155,8 +165,26 @@ async function remove() {
   catch (e) { detailError.value = extractApiErrorMessage(e, t(`${key}.loadFailed`)) }
   finally { stopping.value = false }
 }
+async function removeSelected() {
+  if (deleting.value || !selectedIDs.value.length) return
+  deleting.value = true
+  error.value = ''
+  let failed = 0
+  try {
+    const ids = [...selectedIDs.value]
+    for (const id of ids) {
+      try {
+        await deleteAuthorizationTask(id)
+        selectedIDs.value = selectedIDs.value.filter(value => value !== id)
+        if (selected.value?.id === id) close()
+      } catch { failed++ }
+    }
+    await load()
+    if (failed) error.value = t(`${key}.batchDeleteFailed`, { count: failed })
+  } finally { deleting.value = false }
+}
 function visibility() { if (document.hidden) { clearTimeout(refreshTimer); request?.abort() } else void load() }
-watch(() => [route.query.q, route.query.status, route.query.page], () => { clearTimeout(refreshTimer); clearTimeout(searchTimer); request?.abort(); searchTimer = setTimeout(() => { void load() }, 250) })
+watch(() => [route.query.q, route.query.status, route.query.page], () => { selectedIDs.value = []; clearTimeout(refreshTimer); clearTimeout(searchTimer); request?.abort(); searchTimer = setTimeout(() => { void load() }, 250) })
 watch(() => route.query.task, value => { if (!value) selected.value = null; else if (selected.value?.id !== Number(value)) void load(); scheduleRefresh() })
 onMounted(() => { document.addEventListener('visibilitychange', visibility); void load() })
 onBeforeUnmount(() => { disposed = true; request?.abort(); clearTimeout(refreshTimer); clearTimeout(searchTimer); document.removeEventListener('visibilitychange', visibility) })

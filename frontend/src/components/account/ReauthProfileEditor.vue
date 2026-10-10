@@ -6,7 +6,10 @@
       <label class="flex items-center gap-2"><input v-model="form.enabled" type="checkbox" />{{ t('admin.accounts.authProfiles.enabled') }}</label>
       <div><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" :required="form.mailbox_mode !== 'api' || form.api_result_type !== 'auth_file'" /></div>
       <p v-if="form.mailbox_mode === 'imap' || form.api_result_type !== 'auth_file'" class="input-hint">{{ t('admin.accounts.authProfiles.mailboxHint') }}</p>
-      <div><label for="auth-profile-mode" class="input-label">{{ t('admin.accounts.authProfiles.mode') }}</label><select id="auth-profile-mode" v-model="form.mailbox_mode" class="input"><option value="imap">IMAP (TLS)</option><option value="api">HTTPS API</option></select></div>
+      <div>
+        <label for="auth-profile-mode" class="input-label">{{ t('admin.accounts.authProfiles.mode') }}</label>
+        <Select id="auth-profile-mode" v-model="form.mailbox_mode" :options="mailboxModeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.mode')" />
+      </div>
       <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label for="auth-profile-host" class="input-label">{{ t('admin.accounts.authProfiles.host') }}</label><input id="auth-profile-host" v-model="form.imap_host" class="input" required /></div>
         <div><label for="auth-profile-port" class="input-label">{{ t('admin.accounts.authProfiles.port') }}</label><input id="auth-profile-port" v-model.number="form.imap_port" class="input" type="number" min="1" max="65535" required /></div>
@@ -14,7 +17,7 @@
       </div>
       <div v-else class="space-y-3">
         <label for="auth-profile-result" class="input-label">{{ t('admin.accounts.authProfiles.resultType') }}</label>
-        <select id="auth-profile-result" v-model="form.api_result_type" class="input"><option value="code">{{ t('admin.accounts.authProfiles.codeResult') }}</option><option value="auth_file">{{ t('admin.accounts.authProfiles.fileResult') }}</option></select>
+        <Select id="auth-profile-result" v-model="form.api_result_type" :options="resultTypeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.resultType')" />
         <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
         <label for="auth-profile-api" class="input-label">{{ t('admin.accounts.authProfiles.apiURL') }}</label><input id="auth-profile-api" v-model="form.api_url" type="url" class="input" required placeholder="https://" />
         <label for="auth-profile-script" class="input-label">{{ t('admin.accounts.authProfiles.script') }}</label>
@@ -54,6 +57,7 @@
 import { ref, watch, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ReauthProfileSecret from './ReauthProfileSecret.vue'
 import ReauthScriptRules from './ReauthScriptRules.vue'
@@ -64,6 +68,11 @@ import type { Proxy } from '@/types'
 const props = defineProps<{ show: boolean; profile?: ReauthProfile | null }>()
 const emit = defineEmits<{ close: []; saved: [profile: ReauthProfile] }>()
 const { t } = useI18n()
+const mailboxModeOptions = [{ value: 'imap', label: 'IMAP (TLS)' }, { value: 'api', label: 'HTTPS API' }]
+const resultTypeOptions = computed(() => [
+  { value: 'code', label: t('admin.accounts.authProfiles.codeResult') },
+  { value: 'auth_file', label: t('admin.accounts.authProfiles.fileResult') }
+])
 const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbox_mode: 'imap', api_result_type: 'code', mailbox_address: '', imap_host: '', imap_port: 993, imap_username: '', api_url: '', code_script: '', has_code_script: false, folder: 'INBOX', sender_filter: '', code_pattern: '(\\d{6})', proxy_id: null, proxy_ids: [], secret: '', has_secret: false })
 const form = ref(defaults())
 const proxies = ref<Proxy[]>([])

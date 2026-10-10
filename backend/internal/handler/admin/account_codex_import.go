@@ -595,10 +595,8 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		)
 		item.Workspace = firstCodexString(raw,
 			[]string{"workspace"}, []string{"workspace_name"}, []string{"workspaceName"},
-			[]string{"workspace_id"}, []string{"workspaceId"},
 			[]string{"tokens", "workspace"}, []string{"tokens", "workspace_name"},
-			[]string{"tokens", "workspaceName"}, []string{"tokens", "workspace_id"},
-			[]string{"tokens", "workspaceId"},
+			[]string{"tokens", "workspaceName"},
 			[]string{"account", "workspace"}, []string{"account", "workspace_name"},
 		)
 		item.Name = firstCodexString(raw, []string{"name"}, []string{"user", "name"})
@@ -652,11 +650,6 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 	if err := enrichCodexImportAccountFromJWT(item, item.AccessToken, true, now); err != nil {
 		return nil, err
 	}
-	if item.Workspace == "" {
-		// auth.json exports commonly carry the selected ChatGPT workspace as
-		// tokens.account_id even when the access token is opaque.
-		item.Workspace = strings.TrimSpace(item.AccountID)
-	}
 	if _, ok := item.Credentials["expires_at"]; !ok {
 		item.WarningTexts = append(item.WarningTexts, "无法从 accessToken 解析过期时间，导入后需自行确认令牌有效性")
 	}
@@ -678,7 +671,7 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 	return item, nil
 }
 
-// codexWorkspaceNote formats the workspace label recovered from Team org claims.
+// codexWorkspaceNote formats an explicitly supplied workspace name.
 func codexWorkspaceNote(workspace string) string {
 	workspace = strings.TrimSpace(workspace)
 	if workspace == "" {
@@ -752,21 +745,6 @@ func enrichCodexImportAccountFromJWT(item *codexImportAccount, token string, val
 	}
 	if item.Organization == "" && len(claims.OpenAIAuth.Organizations) > 0 {
 		item.Organization = claims.OpenAIAuth.Organizations[0].ID
-	}
-	if item.Workspace == "" {
-		for _, org := range claims.OpenAIAuth.Organizations {
-			if org.IsDefault && strings.TrimSpace(org.Title) != "" {
-				item.Workspace = strings.TrimSpace(org.Title)
-				break
-			}
-		}
-	}
-	if item.Workspace == "" && len(claims.OpenAIAuth.Organizations) > 0 {
-		item.Workspace = strings.TrimSpace(claims.OpenAIAuth.Organizations[0].Title)
-	}
-	if item.Workspace == "" {
-		// Some older Team tokens expose only the organization/workspace ID.
-		item.Workspace = strings.TrimSpace(item.Organization)
 	}
 	if item.UserID == "" {
 		item.UserID = strings.TrimSpace(claims.Sub)

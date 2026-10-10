@@ -15,9 +15,10 @@ import (
 )
 
 type ReauthExecutionError struct {
-	Code      string `json:"code"`
-	Message   string `json:"message"`
-	Retryable bool   `json:"retryable"`
+	Code       string `json:"code"`
+	Message    string `json:"message"`
+	Retryable  bool   `json:"retryable"`
+	HTTPStatus int    `json:"httpStatus,omitempty"`
 }
 
 func (e *ReauthExecutionError) Error() string { return e.Message }
@@ -78,6 +79,9 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	client := &http.Client{Transport: transport, Timeout: 125 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
+		if runCtx.Err() != nil {
+			return nil, runCtx.Err()
+		}
 		return nil, &ReauthExecutionError{Code: "RUNNER_UNAVAILABLE", Message: "Authorization runner unavailable or timed out", Retryable: true}
 	}
 	defer resp.Body.Close()
@@ -113,6 +117,9 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 		data, err = io.ReadAll(limited)
 	}
 	if err != nil || len(data) > 256*1024 {
+		if runCtx.Err() != nil {
+			return nil, runCtx.Err()
+		}
 		return nil, &ReauthExecutionError{Code: "INVALID_RUNNER_RESULT", Message: "Runner response exceeds size limit"}
 	}
 	var result ReauthRunnerResult

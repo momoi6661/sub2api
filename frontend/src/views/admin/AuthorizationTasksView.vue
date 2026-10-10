@@ -48,7 +48,7 @@
           <div class="sm:col-span-2"><dt class="text-gray-500 dark:text-dark-400">{{ t('admin.accounts.authProfiles.loginEmail') }}</dt><dd class="mt-1 break-all">{{ selected.login_email || '—' }}</dd></div>
         </dl>
         <p v-if="selected.status === 'queued'" role="status" class="rounded-lg bg-gray-50 p-4 text-sm dark:bg-dark-700">{{ t(`${key}.queueHint`) }}</p>
-        <OneClickAuthProgress v-else :stage="selected.stage" :status="selected.status" :started-at="Date.parse(selected.started_at || selected.created_at)" :finished-at="selected.finished_at ? Date.parse(selected.finished_at) : undefined" :error="selected.error_code ? errorHint(selected.error_code) : undefined" />
+        <OneClickAuthProgress v-else :stage="selected.stage" :status="selected.status" :started-at="Date.parse(selected.started_at || selected.created_at)" :finished-at="selected.finished_at ? Date.parse(selected.finished_at) : undefined" :error="selected.error_code ? errorHint(selected) : undefined" />
         <div>
           <h3 class="mb-3 text-sm font-medium">{{ t(`${key}.timeline`) }}</h3>
           <ol class="space-y-3 border-l border-gray-200 pl-4 text-sm dark:border-dark-600">
@@ -104,7 +104,11 @@ const columns = computed(() => [
 function badge(value: string) { return value === 'succeeded' || value === 'ready' ? 'badge-success' : value === 'failed' ? 'badge-danger' : value === 'cancelled' ? 'badge-warning' : value === 'running' ? 'badge-info' : 'badge-gray' }
 function date(value: string) { return new Date(value).toLocaleString() }
 function duration(task: AuthorizationTask) { return Math.max(0, Math.floor(((task.finished_at ? Date.parse(task.finished_at) : now.value) - Date.parse(task.started_at || task.created_at)) / 1000)) }
-function errorHint(code: string) { return `${code} · ${te(`${key}.errors.${code}`) ? t(`${key}.errors.${code}`) : t(`${key}.errorHint`)}` }
+function errorHint(task: AuthorizationTask) {
+  const code = task.error_code
+  const status = ['AUTH_PAGE_HTTP_ERROR', 'MANUAL_REQUIRED'].includes(code) ? /^Authorization page returned HTTP ([45]\d{2})$/.exec(task.error_message || '')?.[1] : undefined
+  return `${code}${status ? ` (HTTP ${status})` : ''} · ${te(`${key}.errors.${code}`) ? t(`${key}.errors.${code}`) : t(`${key}.errorHint`)}`
+}
 function setPage(value: number) { void router.replace({ query: { ...route.query, page: value > 1 ? String(value) : undefined } }) }
 function clearFilters() { void router.replace({ query: { task: route.query.task } }) }
 function close() { selected.value = null; detailError.value = ''; void router.replace({ query: { ...route.query, task: undefined } }) }

@@ -3,9 +3,13 @@ import { fileURLToPath } from 'node:url'
 
 export const failure = (code, message, retryable = false) => ({ type: 'error', error: { code, message, retryable } })
 
+const interrupted = signal => signal?.reason?.name === 'TimeoutError'
+  ? failure('AUTH_TIMEOUT', 'Authorization did not complete within its deadline', true)
+  : failure('TASK_CANCELLED', 'Task cancelled')
+
 export function executeScript(task, { timeout = 30_000, signal } = {}) {
   return new Promise(resolve => {
-    if (signal?.aborted) return resolve(failure('TASK_CANCELLED', 'Task cancelled'))
+    if (signal?.aborted) return resolve(interrupted(signal))
     const child = spawn(process.execPath, ['--max-old-space-size=128', fileURLToPath(new URL('./script-process.mjs', import.meta.url))], {
       stdio: ['pipe', 'pipe', 'ignore'], env: { PATH: process.env.PATH || '', SYSTEMROOT: process.env.SYSTEMROOT || '' }
     })
@@ -16,7 +20,7 @@ export function executeScript(task, { timeout = 30_000, signal } = {}) {
       clearTimeout(timer); signal?.removeEventListener('abort', abort)
       child.kill(); resolve(result)
     }
-    const abort = () => finish(failure('TASK_CANCELLED', 'Task cancelled'))
+    const abort = () => finish(interrupted(signal))
     const timer = setTimeout(() => finish(failure('SCRIPT_TIMEOUT', 'Script exceeded 30 seconds', true)), timeout)
     signal?.addEventListener('abort', abort, { once: true })
     child.on('error', () => finish(failure('EXECUTOR_UNAVAILABLE', 'Code executor unavailable')))
@@ -39,7 +43,7 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
   let browser
   let phase = 'BROWSER_START_FAILED'
   try {
-    if (signal?.aborted) return failure('TASK_CANCELLED', 'Task cancelled')
+    if (signal?.aborted) return interrupted(signal)
     if (task.mailbox) {
       report('mailbox_connect')
       const snapshot = await executeScript({ ...task, operation: 'mailbox_snapshot' }, { timeout: 10000, signal })
@@ -50,7 +54,7 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
     const proxy = task.proxyURL ? new URL(task.proxyURL) : null
     report('browser_start')
     browser = await chromium.launch({ headless: true })
-    if (signal?.aborted) return failure('TASK_CANCELLED', 'Task cancelled')
+    if (signal?.aborted) return interrupted(signal)
     const context = await browser.newContext({ locale: 'en-US', extraHTTPHeaders: {
       'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7'
     }, ...(proxy ? { proxy: {
@@ -67,9 +71,18 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
     const abort = () => { void browser.close().catch(() => {}) }
     signal?.addEventListener('abort', abort, { once: true })
     try {
+      if (signal?.aborted) return interrupted(signal)
       phase = 'BROWSER_NAVIGATION_FAILED'
       const navigation = await page.goto(task.authURL, { waitUntil: 'domcontentloaded', timeout: 30000 })
-      if (navigation && navigation.status() >= 400) return failure('AUTH_PAGE_HTTP_ERROR', `Authorization page returned HTTP ${navigation.status()}`, true)
+      if (navigation && navigation.status() >= 400) {
+        const status = navigation.status()
+        const body = (await page.locator('body').innerText().catch(() => '')).slice(0, 12000)
+        const challenge = /just a moment|checking your browser|verify you are human|验证您是人类|检查您的浏览器/i.test(body)
+          || await page.locator('iframe[src*="captcha"], iframe[src*="challenges.cloudflare.com"]').first().isVisible()
+        const result = failure(challenge ? 'MANUAL_REQUIRED' : 'AUTH_PAGE_HTTP_ERROR', `Authorization page returned HTTP ${status}`, !challenge && (status === 429 || status >= 500))
+        result.error.httpStatus = status
+        return result
+      }
       report('email_login')
       let submittedEmail = false, submittedCode = false, requestedCode = false, consentSubmitted = false
       let lastActionAt = Date.now()
@@ -143,9 +156,10 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
           }
         }
       }
-      return failure(signal?.aborted ? 'TASK_CANCELLED' : !submittedEmail ? 'LOGIN_PAGE_UNSUPPORTED' : !submittedCode ? 'CODE_PAGE_NOT_REACHED' : 'AUTH_TIMEOUT', 'Authorization did not reach the next login step within its deadline', !signal?.aborted)
+      if (signal?.aborted) return interrupted(signal)
+      return failure(!submittedEmail ? 'LOGIN_PAGE_UNSUPPORTED' : !submittedCode ? 'CODE_PAGE_NOT_REACHED' : 'AUTH_TIMEOUT', 'Authorization did not reach the next login step within its deadline', true)
     } finally { signal?.removeEventListener('abort', abort) }
   } catch {
-    return failure(signal?.aborted ? 'TASK_CANCELLED' : phase, 'Browser login failed at this step; check proxy, page changes or manual verification', !signal?.aborted)
+    return signal?.aborted ? interrupted(signal) : failure(phase, 'Browser login failed at this step; check proxy, page changes or manual verification', true)
   } finally { await browser?.close().catch(() => {}) }
 }

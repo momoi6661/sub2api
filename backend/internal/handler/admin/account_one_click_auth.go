@@ -261,23 +261,6 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if err != nil {
 		return nil, err
 	}
-	if resultType == "code" {
-		if h.openaiOAuthService == nil {
-			return nil, &service.ReauthExecutionError{Code: "OAUTH_UNAVAILABLE", Message: "OAuth service unavailable"}
-		}
-		task.Mode = "browser"
-		task.RedirectURI = "http://localhost:1455/auth/callback"
-		auth, err := h.openaiOAuthService.GenerateAuthURL(ctx, proxyID, task.RedirectURI, service.PlatformOpenAI)
-		if err != nil {
-			return nil, err
-		}
-		task.AuthURL, sessionID = auth.AuthURL, auth.SessionID
-		u, err := url.Parse(auth.AuthURL)
-		if err != nil {
-			return nil, err
-		}
-		task.State = u.Query().Get("state")
-	}
 	if proxyID != nil {
 		proxy, err := h.adminService.GetProxy(ctx, *proxyID)
 		if err != nil {
@@ -295,9 +278,49 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	} else {
 		authProgress(ctx, "browser_authorization")
 	}
-	result, err := service.ExecuteReauthRunner(ctx, task)
-	if err != nil {
-		return nil, err
+	// Every attempt owns a new OAuth session; always discard unused PKCE state.
+	defer func() {
+		if sessionID != "" {
+			h.openaiOAuthService.CancelAuthSession(sessionID)
+		}
+	}()
+	var result *service.ReauthRunnerResult
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if resultType == "code" {
+			if h.openaiOAuthService == nil {
+				return nil, &service.ReauthExecutionError{Code: "OAUTH_UNAVAILABLE", Message: "OAuth service unavailable"}
+			}
+			if sessionID != "" {
+				h.openaiOAuthService.CancelAuthSession(sessionID)
+				sessionID = ""
+			}
+			task.Mode = "browser"
+			task.RedirectURI = "http://localhost:1455/auth/callback"
+			auth, authErr := h.openaiOAuthService.GenerateAuthURL(ctx, proxyID, task.RedirectURI, service.PlatformOpenAI)
+			if authErr != nil {
+				return nil, authErr
+			}
+			task.AuthURL, sessionID = auth.AuthURL, auth.SessionID
+			u, parseErr := url.Parse(auth.AuthURL)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			task.State = u.Query().Get("state")
+		}
+		result, err = service.ExecuteReauthRunner(ctx, task)
+		if err == nil {
+			break
+		}
+		var execution *service.ReauthExecutionError
+		// Only retry before email submission: never send duplicate codes or replay scripts.
+		if attempt != 0 || resultType != "code" || !errors.As(err, &execution) || !execution.Retryable ||
+			(execution.Code != "AUTH_PAGE_HTTP_ERROR" && execution.Code != "BROWSER_NAVIGATION_FAILED") {
+			return nil, err
+		}
+		authProgress(ctx, "authorization_retry")
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

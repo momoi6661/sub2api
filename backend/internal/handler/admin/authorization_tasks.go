@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/mail"
@@ -119,6 +120,9 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 		var execution *service.ReauthExecutionError
 		if errors.As(err, &execution) && safeAuthErrorCode.MatchString(execution.Code) {
 			code = execution.Code
+			if (code == "AUTH_PAGE_HTTP_ERROR" || code == "MANUAL_REQUIRED") && execution.HTTPStatus >= 400 && execution.HTTPStatus <= 599 {
+				message = fmt.Sprintf("Authorization page returned HTTP %d", execution.HTTPStatus)
+			}
 			if code == "TASK_CANCELLED" {
 				status = "cancelled"
 			}
@@ -130,7 +134,7 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			code = "AUTH_TIMEOUT"
 		}
-		// Script/upstream messages may contain credentials. History stores only a safe code and fixed text.
+		// Never persist arbitrary script/upstream text; only a validated numeric HTTP status.
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

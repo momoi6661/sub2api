@@ -24,7 +24,7 @@ const server = http.createServer(async (request, response) => {
   }
   const finish = result => { if (!response.destroyed) response.end(JSON.stringify(result) + (streaming ? '\n' : '')) }
   response.on('close', () => { if (!response.writableEnded) controller.abort() })
-  const timer = setTimeout(() => controller.abort(), 120000)
+  const timer = setTimeout(() => controller.abort(new DOMException('Authorization deadline exceeded', 'TimeoutError')), 120000)
   active++
   try {
     let body = ''

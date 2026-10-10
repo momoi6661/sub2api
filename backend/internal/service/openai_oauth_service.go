@@ -101,6 +101,11 @@ func (s *OpenAIOAuthService) GenerateAuthURL(ctx context.Context, proxyID *int64
 	}, nil
 }
 
+// CancelAuthSession discards PKCE material for a failed or cancelled authorization.
+func (s *OpenAIOAuthService) CancelAuthSession(sessionID string) {
+	s.sessionStore.Delete(sessionID)
+}
+
 // OpenAIExchangeCodeInput represents the input for code exchange
 type OpenAIExchangeCodeInput struct {
 	SessionID   string

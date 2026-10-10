@@ -15,7 +15,10 @@ workspace selection return `MANUAL_REQUIRED`. Password pages (including redirect
 pages) use `/api/accounts/passwordless/send-otp`, then mailbox code reading and
 `/api/accounts/email-otp/validate`. A return to the password page after sending
 returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted. No challenge
-solving or automatic retries are included.
+solving is included. If the mailbox reader is still waiting after 30 seconds,
+the runner sends one `/api/accounts/email-otp/resend` request in the same session.
+It keeps the original UID snapshot and reader, and accepts the resend endpoint's
+`success: true` response. No repeated resend loop is used.
 
 The readable protocol reference is `Wenfxl-Codex-Manager-v18.2.0`:
 `utils/auth_pipeline/register.py::run_oauth_only`, `oauth.py`, and
@@ -69,7 +72,11 @@ UIDNEXT and UIDVALIDITY. It only reads new UIDs after that snapshot, checks the
 server delivery time against task start, and matches To/Cc/Delivered-To/X-Original-To
 against the account login email. Optional sender filtering is an exact email
 address. The selected OAuth proxy does not route the IMAP mailbox connection.
-Each read has a 30-second deadline and does not mark or delete messages.
+IMAP waiting defaults to 60 seconds (`MAILBOX_WAIT_SECONDS`, 30–180 seconds),
+subject to the overall 120-second authorization deadline. The IMAP child has a
+190-second limit so it cannot truncate that wait at the script default of 30
+seconds. Custom code scripts retain their 30-second deadline. Reading does not
+mark or delete messages.
 
 Automatic execution is off by default. The panel checks authentication failures
 once per minute and persists an attempt fingerprint before execution. Each failed

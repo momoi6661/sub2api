@@ -41,13 +41,14 @@ function provider(options = {}) {
       if (options.passwordRedirect) return json({ continue_url: '/login-route' })
       if (options.password) return json({ continue_url: '/log-in/password', page: { type: 'password' } })
       sentCode = true
+      if (url.pathname === '/api/accounts/email-otp/resend') return json({ success: true })
       return json({ continue_url: '/email-verification' })
     }
     if (url.pathname === '/login-route') return redirect('/log-in/password')
     if (url.pathname === '/log-in/password') return new Response('<html>Password or email code</html>', { headers: { 'set-cookie': 'oai-did=test-device; Secure; Path=/' } })
-    if (url.pathname === '/api/accounts/passwordless/send-otp') {
-      assert.equal(init.headers['oai-device-id'], 'test-device')
-      assert.equal(init.headers.Referer, origin + '/log-in/password')
+    if (url.pathname === '/api/accounts/passwordless/send-otp' || url.pathname === '/api/accounts/email-otp/resend') {
+      if (init.headers.Referer.endsWith('/log-in/password')) assert.equal(init.headers['oai-device-id'], 'test-device')
+      else assert.equal(init.headers.Referer, origin + '/email-verification')
       if (options.sendRejected) return new Response('private credentials', { status: 403 })
       if (options.codeUnavailable) return json({ continue_url: '/log-in/password' })
       sentCode = true
@@ -115,6 +116,36 @@ test('IMAP captures a new UID boundary before protocol login', async () => {
   assert.equal(mock.stages[0], 'mailbox_connect')
   assert.equal(mock.reads.length, 2)
   assert.equal(task.mailbox.minUID, undefined, 'input task must not be mutated')
+})
+
+test('resends once after 30 seconds while keeping the mailbox reader and snapshot', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const mock = provider()
+  let started, deliver
+  const ready = new Promise(resolve => { started = resolve })
+  const code = new Promise(resolve => { deliver = resolve })
+  let reads = 0
+  const reader = async (task, options) => {
+    if (task.operation === 'mailbox_snapshot') return mock.reader(task)
+    reads++
+    assert.equal(task.mailbox.minUID, 42)
+    assert.ok(options.timeout > 60000)
+    started()
+    return code
+  }
+  const fetch = async (url, init) => {
+    const response = await mock.fetch(url, init)
+    if (new URL(url).pathname === '/api/accounts/email-otp/resend') deliver({ type: 'code', code: '123456' })
+    return response
+  }
+  const pending = authorizeWithProtocol({ ...makeTask(), mailbox: { host: 'imap.example.com' } }, reader, undefined, mock.report, fetch)
+  await ready
+  t.mock.timers.tick(29999)
+  assert.equal(mock.requests.filter(r => r.url.pathname.endsWith('/resend')).length, 0)
+  t.mock.timers.tick(1)
+  assert.equal((await pending).type, 'auth_file')
+  assert.equal(reads, 1)
+  assert.equal(mock.requests.filter(r => r.url.pathname.endsWith('/resend')).length, 1)
 })
 
 test('password page switches to email-code protocol without submitting a password', async () => {

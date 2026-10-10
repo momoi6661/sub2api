@@ -157,7 +157,33 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       }
       if (!step.code && step.url.pathname === '/email-verification') {
         report('waiting_code')
-        const result = await executeScript({ ...task, resultType: 'code' }, { signal })
+        const readerController = new AbortController()
+        const readerSignal = signal ? AbortSignal.any([signal, readerController.signal]) : readerController.signal
+        let resendTimer
+        let result
+        try {
+          // Keep the original mailbox snapshot and reader alive during resend.
+          const reading = executeScript({ ...task, resultType: 'code' }, {
+            signal: readerSignal, ...(task.mailbox ? { timeout: 190000 } : {})
+          })
+          const resendDue = new Promise(resolve => { resendTimer = setTimeout(() => resolve(null), 30000) })
+          result = await Promise.race([reading, resendDue])
+          if (result === null) {
+            signal?.throwIfAborted()
+            phase = 'CODE_REQUEST_FAILED'
+            report('requesting_code')
+            const resent = await post('/api/accounts/email-otp/resend', {}, step.url)
+            const destination = nextURL(resent.data) || (resent.data.success === true || Object.keys(resent.data).length === 0 ? '/email-verification' : '')
+            if (!destination) reject('EMAIL_CODE_UNAVAILABLE', 'The provider did not confirm the resend request')
+            step = await follow(destination)
+            if (step.url.pathname !== '/email-verification') reject('EMAIL_CODE_UNAVAILABLE', 'The provider did not return to email verification after resend')
+            report('waiting_code')
+            result = await reading
+          }
+        } finally {
+          clearTimeout(resendTimer)
+          readerController.abort()
+        }
         if (result.type === 'error') return result
         if (result.type !== 'code' || typeof result.code !== 'string' || !result.code.trim()) reject('INVALID_SCRIPT_RESULT', 'Mailbox reader must return a verification code')
         signal?.throwIfAborted()

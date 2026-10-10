@@ -913,6 +913,20 @@ const refreshTodayStatsBatch = async () => {
   }
 }
 
+// Explicit list refresh must also invalidate and re-query upstream usage for
+// every visible account, including virtualized rows whose cell is not mounted.
+const refreshVisibleUsageBatch = async () => {
+  if (!isDesktopViewport.value) return
+  for (const account of accounts.value) {
+    queueBatchedUsage(account, { force: true })
+  }
+  if (usageBatchFlushTimer !== null) {
+    clearTimeout(usageBatchFlushTimer)
+    usageBatchFlushTimer = null
+  }
+  await flushQueuedUsageBatch()
+}
+
 const autoRefreshIntervalLabel = (sec: number) => {
   if (sec === 5) return t('admin.accounts.refreshInterval5s')
   if (sec === 10) return t('admin.accounts.refreshInterval10s')
@@ -1487,6 +1501,7 @@ const handleManualRefresh = async () => {
   await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
   // Force usage cells to refetch /usage on explicit user refresh.
   usageManualRefreshToken.value += 1
+  await refreshVisibleUsageBatch()
 }
 
 const loadUpstreamBillingProbeGlobalState = async () => {

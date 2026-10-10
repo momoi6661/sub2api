@@ -81,6 +81,7 @@ type codexImportAccount struct {
 	UserID          string
 	PlanType        string
 	Organization    string
+	Workspace       string
 	AgentRuntimeID  string
 	AgentPrivateKey string
 	AgentTaskID     string
@@ -277,6 +278,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 			mergedCredentials := mergeCodexImportCredentials(existing.Credentials, credentials, item)
 			mergedExtra := mergeCodexImportMap(existing.Extra, extra)
 			updateInput := &service.UpdateAccountInput{
+				Notes:              mergeCodexWorkspaceNote(existing.Notes, item.Workspace),
 				Credentials:        mergedCredentials,
 				Extra:              mergedExtra,
 				Concurrency:        req.Concurrency,
@@ -330,7 +332,7 @@ func (h *AccountHandler) importCodexSessions(ctx context.Context, req CodexSessi
 
 		account, createErr := h.adminService.CreateAccount(ctx, &service.CreateAccountInput{
 			Name:                  accountName,
-			Notes:                 req.Notes,
+			Notes:                 mergeCodexWorkspaceNote(req.Notes, item.Workspace),
 			Platform:              service.PlatformOpenAI,
 			Type:                  service.AccountTypeOAuth,
 			Credentials:           credentials,
@@ -585,6 +587,10 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 			[]string{"org_id"},
 			[]string{"orgId"},
 		)
+		item.Workspace = firstCodexString(raw,
+			[]string{"workspace"}, []string{"workspace_name"}, []string{"workspaceName"},
+			[]string{"account", "workspace"}, []string{"account", "workspace_name"},
+		)
 		item.Name = firstCodexString(raw, []string{"name"}, []string{"user", "name"})
 		authProvider := firstCodexString(raw, []string{"auth_provider"}, []string{"authProvider"})
 		if authProvider != "" {
@@ -657,6 +663,30 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 	return item, nil
 }
 
+// codexWorkspaceNote formats the workspace label recovered from Team org claims.
+func codexWorkspaceNote(workspace string) string {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return ""
+	}
+	return "工作空间: " + workspace
+}
+
+func mergeCodexWorkspaceNote(existing *string, workspace string) *string {
+	note := codexWorkspaceNote(workspace)
+	if note == "" {
+		return existing
+	}
+	if existing == nil || strings.TrimSpace(*existing) == "" {
+		return &note
+	}
+	if strings.Contains(*existing, note) {
+		return existing
+	}
+	merged := strings.TrimSpace(*existing) + "\n" + note
+	return &merged
+}
+
 func enrichCodexImportAccountFromJWT(item *codexImportAccount, token string, validateExpiry bool, now time.Time) error {
 	claims, err := decodeCodexJWTClaims(token)
 	if err != nil {
@@ -707,6 +737,21 @@ func enrichCodexImportAccountFromJWT(item *codexImportAccount, token string, val
 	}
 	if item.Organization == "" && len(claims.OpenAIAuth.Organizations) > 0 {
 		item.Organization = claims.OpenAIAuth.Organizations[0].ID
+	}
+	if item.Workspace == "" {
+		for _, org := range claims.OpenAIAuth.Organizations {
+			if org.IsDefault && strings.TrimSpace(org.Title) != "" {
+				item.Workspace = strings.TrimSpace(org.Title)
+				break
+			}
+		}
+	}
+	if item.Workspace == "" && len(claims.OpenAIAuth.Organizations) > 0 {
+		item.Workspace = strings.TrimSpace(claims.OpenAIAuth.Organizations[0].Title)
+	}
+	if item.Workspace == "" {
+		// Some older Team tokens expose only the organization/workspace ID.
+		item.Workspace = strings.TrimSpace(item.Organization)
 	}
 	if item.UserID == "" {
 		item.UserID = strings.TrimSpace(claims.Sub)

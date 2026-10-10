@@ -2,8 +2,9 @@
 
 All one-click authorization uses protocols; no Playwright, Chromium or Xvfb is
 installed. Existing IMAP and API code profiles read verification codes, and an
-isolated HTTP cookie session performs email login, OAuth consent and PKCE token
-exchange. The runner returns one Codex authorization JSON file. Custom `auth_file`
+isolated `curl_cffi` HTTP session performs email login, OAuth consent and PKCE
+token exchange with the reference project's Chrome TLS profile. The runner
+returns one Codex authorization JSON file. Custom `auth_file`
 scripts continue to return files directly without starting a login session.
 
 Only existing accounts are authorized. `/about-you`, signup and profile creation
@@ -13,17 +14,18 @@ HTTP status when available. Phone verification, passkeys, MFA and ambiguous
 workspace selection return `MANUAL_REQUIRED`. Password pages (including redirected
 pages) use `/api/accounts/passwordless/send-otp`, then mailbox code reading and
 `/api/accounts/email-otp/validate`. A return to the password page after sending
-returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted. No challenge solving,
-fingerprint impersonation or automatic retries are included.
+returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted. No challenge
+solving or automatic retries are included.
 
 The readable protocol reference is `Wenfxl-Codex-Manager-v18.2.0`:
 `utils/auth_pipeline/register.py::run_oauth_only`, `oauth.py`, and
 `utils/email_providers/mail_service.py::get_oai_code`. Its mailbox readers use
 IMAP or HTTP APIs, not Playwright. Its `auth_core` is a compiled extension;
 `init_auth`/`generate_payload` are not included in this client. This is not a complete
-port of the reference's HTTP transport and compiled module. Provider security
-requirements may prevent this client from reaching even the initial login step;
-email-code support does not resolve an authorization-entry security challenge.
+port of the reference's compiled Sentinel module. Provider security
+requirements may still prevent this client from reaching even the initial login
+step; email-code support does not resolve an authorization-entry security
+challenge.
 
 Run this optional service separately from Sub2API. Set `REAUTH_RUNNER_TOKEN` to a
 random value of at least 32 characters. Configure Sub2API with

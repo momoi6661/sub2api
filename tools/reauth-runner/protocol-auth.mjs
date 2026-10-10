@@ -1,6 +1,6 @@
 import { randomBytes, createHash } from 'node:crypto'
 import { CookieJar } from 'tough-cookie'
-import { createProxyFetch } from './proxy-fetch.mjs'
+import { createCurlCffiFetch } from './curl-cffi-fetch.mjs'
 
 const origin = 'https://auth.openai.com'
 const redirectURI = 'http://localhost:1455/auth/callback'
@@ -48,7 +48,10 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       }
       task = { ...task, mailbox: { ...task.mailbox, minUID: snapshot.uidNext, uidValidity: snapshot.uidValidity } }
     }
-    transport = createProxyFetch(task.proxyURL)
+    // The reference GPT flow uses curl_cffi's Chrome TLS profile for the
+    // provider session. Keep the Node proxy transport for scripts, but use the
+    // protocol transport for OAuth/OTP requests.
+    transport = fetchOverride ? null : createCurlCffiFetch(task.proxyURL)
     const fetch = fetchOverride || transport.fetch
     const jar = new CookieJar()
     const state = randomBytes(24).toString('base64url')
@@ -72,6 +75,10 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         ...options, redirect: 'manual', size: 1024 * 1024,
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
         headers: { Accept: options.method === 'POST' ? 'application/json' : 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9',
+            'Sec-Fetch-Dest': options.method === 'POST' ? 'empty' : 'document',
+            'Sec-Fetch-Mode': options.method === 'POST' ? 'cors' : 'navigate',
+            'Sec-Fetch-Site': 'same-origin',
+            ...(options.method === 'GET' ? { 'Upgrade-Insecure-Requests': '1' } : {}),
           ...(options.method === 'POST' && deviceID ? { 'oai-device-id': deviceID } : {}),
           ...(cookies ? { Cookie: cookies } : {}), ...options.headers }
       })

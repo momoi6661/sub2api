@@ -119,8 +119,12 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 		var execution *service.ReauthExecutionError
 		if errors.As(err, &execution) && safeAuthErrorCode.MatchString(execution.Code) {
 			code = execution.Code
+			if code == "TASK_CANCELLED" {
+				status = "cancelled"
+			}
 		}
 		if errors.Is(err, context.Canceled) {
+			status = "cancelled"
 			code = "TASK_CANCELLED"
 		}
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -148,6 +152,10 @@ func (h *AccountHandler) authorizeRecorded(ctx context.Context, id int64, source
 	}
 	h.authTaskControllers.Store(task.ID, cancel)
 	defer h.authTaskControllers.Delete(task.ID)
+	currentTask, readErr := h.authTaskRepo.Get(ctx, task.ID)
+	if readErr != nil || currentTask.Status != "running" {
+		return nil, &service.ReauthExecutionError{Code: "TASK_CANCELLED", Message: "Task cancelled"}
+	}
 	result, err := h.authorizeOneClick(h.recordedProgress(ctx, task.ID), id)
 	if ctx.Err() != nil {
 		err = ctx.Err()
@@ -171,6 +179,11 @@ func (h *AccountHandler) executeQueuedAuthorization(parent context.Context, task
 		}
 		h.finishAuthRecord(task.ID, "succeeded", resultErr)
 	}()
+	currentTask, readErr := h.authTaskRepo.Get(ctx, task.ID)
+	if readErr != nil || currentTask.Status != "running" {
+		resultErr = context.Canceled
+		return
+	}
 	account, err := h.adminService.GetAccount(ctx, task.AccountID)
 	if err != nil {
 		resultErr = &service.ReauthExecutionError{Code: "ACCOUNT_UNAVAILABLE", Message: "Account no longer available"}
@@ -318,12 +331,12 @@ func (h *AccountHandler) CancelAuthorizationTask(c *gin.Context) {
 		response.BadRequest(c, "Invalid task ID")
 		return
 	}
-	if cancel, ok := h.authTaskControllers.Load(id); ok {
-		cancel.(context.CancelFunc)()
-	}
 	if err := h.authTaskRepo.Cancel(c.Request.Context(), id); err != nil {
 		response.ErrorFrom(c, err)
 		return
+	}
+	if cancel, ok := h.authTaskControllers.Load(id); ok {
+		cancel.(context.CancelFunc)()
 	}
 	task, err := h.authTaskRepo.Get(c.Request.Context(), id)
 	if errors.Is(err, sql.ErrNoRows) {

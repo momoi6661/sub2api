@@ -159,6 +159,11 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	}
 	h.authTaskControllers.Store(record.ID, taskCancel)
 	defer h.authTaskControllers.Delete(record.ID)
+	currentTask, readErr := h.authTaskRepo.Get(ctx, record.ID)
+	if readErr != nil || currentTask.Status != "running" {
+		finishAuthRequest(c, nil, context.Canceled)
+		return
+	}
 	ctx = h.recordedProgress(ctx, record.ID)
 	c.Set("auth_task_finish", func(err error) {
 		if ctx.Err() != nil {
@@ -292,6 +297,9 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	}
 	result, err := service.ExecuteReauthRunner(ctx, task)
 	if err != nil {
+		return nil, err
+	}
+	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
 	var payload *ApplyOAuthCredentialsRequest

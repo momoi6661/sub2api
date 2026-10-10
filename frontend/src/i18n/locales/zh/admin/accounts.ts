@@ -386,7 +386,7 @@ export default {
         empty: '暂无授权任务', emptyHint: '在账号列表点击一键授权，或在添加账号时使用一键授权。',
         noMatches: '没有匹配的任务', noMatchesHint: '调整搜索内容或清除状态筛选后重试。',
         submitted: '任务已提交，进度和结果可在侧边栏「授权任务」查看。',
-        queueHint: '已进入队列，按顺序执行；切换页面不会取消任务。', newAccount: '待添加账号', retry: '重新提交授权', cancel: '中断任务', delete: '删除记录',
+        queueHint: '已进入队列，最多同时执行 2 个独立任务；切换页面不会取消任务。', newAccount: '待添加账号', retry: '重新提交授权', cancel: '中断任务', delete: '删除记录',
         loadFailed: '任务记录读取失败，请点击刷新重试。', errorHint: '请检查授权配置和代理，或人工授权后重试。',
         statuses: { queued: '排队中', running: '执行中', succeeded: '授权成功', ready: '凭据已获取', failed: '执行失败', cancelled: '已中断' },
         sources: { manual: '手动授权', batch: '批量授权', automatic: '失效自动授权', new_account: '新增账号授权' },
@@ -403,12 +403,13 @@ export default {
           MANUAL_REQUIRED: '需要密码、验证码挑战或其他人工验证，请人工授权。',
           PROFILE_REQUIRED: '请在账号设置中选择并保存一个启用的授权配置，再重新提交。',
           TASK_INTERRUPTED: '任务超时或服务中断，确认配置后手动重新提交。',
-          TASK_CANCELLED: '任务已取消；新增账号关闭弹窗会取消授权，已有账号任务在服务停止时会终止。',
+          TASK_CANCELLED: '任务已中断，可在授权任务页面手动重新提交。',
           ACCOUNT_CHANGED: '排队或执行期间账号授权信息发生变化，请确认绑定配置后重新提交。',
           AUTH_TIMEOUT: '任务已超时，请查看最后阶段并检查配置或人工授权。'
         }
       },
       oneClickAuth: {
+        cancelled: '任务已中断。',
         tasks: '授权任务',
         progress: '授权阶段',
         running: '授权中…',

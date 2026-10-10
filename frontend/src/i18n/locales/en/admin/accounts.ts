@@ -587,7 +587,7 @@ export default {
         empty: 'No authorization tasks', emptyHint: 'Use one-click authorization in the account list or when adding an account.',
         noMatches: 'No matching tasks', noMatchesHint: 'Adjust your search or clear the status filter.',
         submitted: 'Task submitted. View progress and results under Authorization tasks in the sidebar.',
-        queueHint: 'Queued for sequential execution. Navigation does not cancel this task.', newAccount: 'New account', retry: 'Submit authorization again', cancel: 'Cancel task', delete: 'Delete record',
+        queueHint: 'Queued; up to 2 isolated tasks run concurrently. Navigation does not cancel this task.', newAccount: 'New account', retry: 'Submit authorization again', cancel: 'Cancel task', delete: 'Delete record',
         loadFailed: 'Could not load task history. Refresh to retry.', errorHint: 'Check the authorization profile and proxy, or authorize manually.',
         statuses: { queued: 'Queued', running: 'Running', succeeded: 'Authorized', ready: 'Credentials obtained', failed: 'Failed', cancelled: 'Cancelled' },
         sources: { manual: 'Manual', batch: 'Batch', automatic: 'Automatic recovery', new_account: 'New account' },
@@ -604,12 +604,13 @@ export default {
           MANUAL_REQUIRED: 'Password, CAPTCHA or other manual verification is required. Authorize manually.',
           PROFILE_REQUIRED: 'Select and save an enabled authorization profile in account settings, then resubmit.',
           TASK_INTERRUPTED: 'The task timed out or the service stopped. Check the configuration and resubmit manually.',
-          TASK_CANCELLED: 'Task cancelled. Closing a new-account dialog cancels authorization; existing-account tasks stop when the service shuts down.',
+          TASK_CANCELLED: 'Task cancelled. You can submit a new task manually.',
           ACCOUNT_CHANGED: 'Account authorization settings changed while queued or running. Check the binding and resubmit.',
           AUTH_TIMEOUT: 'The task timed out. Check the last stage and configuration, or authorize manually.'
         }
       },
       oneClickAuth: {
+        cancelled: 'Task cancelled.',
         tasks: 'Authorization tasks',
         progress: 'Authorization stages',
         running: 'Authorizing…',

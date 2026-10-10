@@ -2,7 +2,7 @@
   <div class="rounded-lg border border-gray-200 p-4 dark:border-dark-600" role="status" aria-live="polite">
     <div class="flex flex-wrap items-center justify-between gap-2">
       <div class="flex min-w-0 items-center gap-2">
-        <Icon :name="running ? 'refresh' : status === 'failed' ? 'x' : 'check'" size="md" :class="running ? 'animate-spin text-primary-500' : status === 'failed' ? 'text-red-500' : 'text-green-500'" />
+        <Icon :name="running ? 'refresh' : status === 'failed' || status === 'cancelled' ? 'x' : 'check'" size="md" :class="running ? 'animate-spin text-primary-500' : status === 'failed' || status === 'cancelled' ? 'text-red-500' : 'text-green-500'" />
         <span class="min-w-0 break-all font-medium text-gray-900 dark:text-white">{{ title || t('admin.accounts.oneClickAuth.title') }}</span>
       </div>
       <span class="text-xs tabular-nums text-gray-500 dark:text-dark-400">{{ t('admin.accounts.oneClickAuth.elapsed', { seconds: elapsed }) }}</span>
@@ -29,7 +29,7 @@ import Icon from '@/components/icons/Icon.vue'
 import type { AuthorizationStage } from '@/api/admin/reauthProfiles'
 
 const props = defineProps<{
-  title?: string; stage: AuthorizationStage; status: 'running' | 'succeeded' | 'failed' | 'ready'
+  title?: string; stage: AuthorizationStage; status: 'running' | 'succeeded' | 'failed' | 'ready' | 'cancelled'
   startedAt: number; finishedAt?: number; error?: string
 }>()
 const { t } = useI18n()

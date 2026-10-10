@@ -51,13 +51,15 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
     report('browser_start')
     browser = await chromium.launch({ headless: true })
     if (signal?.aborted) return failure('TASK_CANCELLED', 'Task cancelled')
-    const context = await browser.newContext(proxy ? { proxy: {
+    const context = await browser.newContext({ locale: 'en-US', extraHTTPHeaders: {
+      'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7'
+    }, ...(proxy ? { proxy: {
       server: `${proxy.protocol}//${proxy.host}`, username: decodeURIComponent(proxy.username), password: decodeURIComponent(proxy.password)
-    } } : {})
+    } } : {}) })
     const page = await context.newPage()
     page.setDefaultTimeout(8000)
     let callback = null
-    await page.route(`${task.redirectURI}*`, async route => {
+    await context.route(`${task.redirectURI}*`, async route => {
       const url = new URL(route.request().url())
       callback = { type: 'oauth_callback', code: url.searchParams.get('code'), state: url.searchParams.get('state'), error: url.searchParams.get('error') }
       await route.fulfill({ contentType: 'text/plain', body: 'Authorization callback received.' })
@@ -66,9 +68,10 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
     signal?.addEventListener('abort', abort, { once: true })
     try {
       phase = 'BROWSER_NAVIGATION_FAILED'
-      await page.goto(task.authURL, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      const navigation = await page.goto(task.authURL, { waitUntil: 'domcontentloaded', timeout: 30000 })
+      if (navigation && navigation.status() >= 400) return failure('AUTH_PAGE_HTTP_ERROR', `Authorization page returned HTTP ${navigation.status()}`, true)
       report('email_login')
-      let submittedEmail = false, submittedCode = false, requestedCode = false, consentSubmitted = false, openedLogin = false
+      let submittedEmail = false, submittedCode = false, requestedCode = false, consentSubmitted = false
       let lastActionAt = Date.now()
       const deadline = Date.now() + 100000
       while (Date.now() < deadline && !signal?.aborted) {
@@ -83,8 +86,16 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
         const alert = page.getByRole('alert').first()
         if (await alert.isVisible() && /invalid|incorrect|expired|could not|try again|无效|错误|已过期/i.test(await alert.innerText())) return failure('AUTH_REJECTED', 'Login rejected the verification code or authorization request')
         // Hidden duplicate inputs/buttons are common on the login landing page.
-        const email = page.locator('input[type="email"]:visible, input[name="email"]:visible, input[id*="email" i]:visible, input[autocomplete="email"]:visible, input[name="username"]:visible, input[autocomplete="username"]:visible').first()
-        const otp = page.locator('input[autocomplete="one-time-code"]:visible, input[name="code"]:visible, input[name="otp"]:visible, input[name="otp_code"]:visible, input[name="one-time-code"]:visible').first()
+        const labelledInput = async (label, fallback) => {
+          const matches = page.getByLabel(label)
+          for (let i = 0; i < await matches.count(); i++) {
+            const candidate = matches.nth(i)
+            if (await candidate.isVisible() && await candidate.isEditable()) return candidate
+          }
+          return page.locator(fallback).first()
+        }
+        const email = await labelledInput(/^(email( address)?|电子邮件地址|电子邮箱|邮箱地址)$/i, 'input[type="email"]:visible, input[name="email"]:visible, input[id*="email" i]:visible, input[autocomplete="email"]:visible, input[name="username"]:visible, input[autocomplete="username"]:visible')
+        const otp = await labelledInput(/^(verification code|email code|code|验证码)$/i, 'input[autocomplete="one-time-code"]:visible, input[name="code"]:visible, input[name="otp"]:visible, input[name="otp_code"]:visible, input[name="one-time-code"]:visible')
         const visibleControl = async (scope, roles, name) => {
           for (const role of roles) {
             const matches = scope.getByRole(role, { name })
@@ -120,9 +131,9 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
         } else {
           const codeLabel = /send.*code|use.*code|email.*code|log\s?in with.*code|sign\s?in with.*code|one.time code|发送.*验证码|使用.*验证码|通过.*验证码/i
           const sendCode = await visibleControl(page, ['button', 'link'], codeLabel)
-          const login = !submittedEmail && !openedLogin ? await visibleControl(page, ['button', 'link'], /^(log\s?in|sign\s?in|continue\s+with\s+(email|email\s+address)|use\s+email|email\s+login|登录|使用邮箱)(\s|$)/i) : null
+          const login = !submittedEmail ? await visibleControl(page, ['button', 'link'], /^(log\s?in|sign\s?in|continue\s+with\s+(email|email\s+address)|use\s+email|email\s+login|登录|使用邮箱)(\s|$)/i) : null
           const consent = submittedCode && !consentSubmitted ? await visibleControl(page, ['button'], /^(continue|allow|authorize|继续|允许|授权)(\s|$)/i) : null
-          if (login) { phase = 'LOGIN_ENTRY_FAILED'; report('email_login'); await login.click(); openedLogin = true; lastActionAt = Date.now() }
+          if (login) { phase = 'LOGIN_ENTRY_FAILED'; report('email_login'); await login.click(); lastActionAt = Date.now() }
           else if (!requestedCode && submittedEmail && sendCode) { phase = 'CODE_REQUEST_FAILED'; report('requesting_code'); await sendCode.click(); requestedCode = true; lastActionAt = Date.now() }
           else if (await page.locator('input[type="password"]:visible').first().isVisible() && Date.now() - lastActionAt > 5000) return failure('MANUAL_REQUIRED', 'Login requires a password or unsupported verification method')
           else if (consent) { phase = 'CONSENT_FAILED'; await consent.click(); consentSubmitted = true; lastActionAt = Date.now() }

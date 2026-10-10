@@ -3,7 +3,7 @@
     :show="show"
     :title="t('admin.accounts.createAccount')"
     width="wide"
-    @close="handleClose"
+    @close="!submitting && handleClose()"
   >
     <!-- Step Indicator for OAuth accounts -->
     <div v-if="isOAuthFlow" class="mb-6 flex items-center justify-center">
@@ -3604,7 +3604,18 @@
 
     <!-- Step 2: OAuth Authorization -->
     <div v-else class="space-y-5">
+      <div v-if="form.platform === 'openai'" class="flex flex-wrap gap-2" role="group" :aria-label="t('admin.accounts.oauth.manualAuth')">
+        <button type="button" :class="['btn', newAuthMethod === 'one-click' ? 'btn-primary' : 'btn-secondary']" :aria-pressed="newAuthMethod === 'one-click'" :disabled="submitting || currentOAuthLoading" @click="newAuthMethod = 'one-click'">{{ t('admin.accounts.oneClickAuth.title') }}</button>
+        <button type="button" :class="['btn', newAuthMethod === 'manual' ? 'btn-primary' : 'btn-secondary']" :aria-pressed="newAuthMethod === 'manual'" :disabled="submitting" @click="newAuthMethod = 'manual'">{{ t('admin.accounts.oneClickAuth.otherMethods') }}</button>
+      </div>
+      <NewAccountOneClickAuth
+        v-if="form.platform === 'openai' && newAuthMethod === 'one-click'"
+        :proxyID="form.proxy_id"
+        :submitting="submitting"
+        @authorized="handleNewAccountAuthorization"
+      />
       <OAuthAuthorizationFlow
+        v-else
         ref="oauthFlowRef"
         :add-method="form.platform === 'anthropic' ? addMethod : 'oauth'"
         :auth-url="currentAuthUrl"
@@ -3683,11 +3694,11 @@
         </button>
       </div>
       <div v-else class="flex justify-between gap-3">
-        <button type="button" class="btn btn-secondary" @click="goBackToBasicInfo">
+        <button type="button" class="btn btn-secondary" :disabled="submitting" @click="goBackToBasicInfo">
           {{ t('common.back') }}
         </button>
         <button
-          v-if="isManualInputMethod"
+          v-if="isManualInputMethod && !(form.platform === 'openai' && newAuthMethod === 'one-click')"
           type="button"
           :disabled="!canExchangeCode"
           class="btn btn-primary"
@@ -4056,6 +4067,8 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
+import NewAccountOneClickAuth from './NewAccountOneClickAuth.vue'
+import type { NewAccountAuthorization } from '@/api/admin/reauthProfiles'
 
 // Type for exposed OAuthAuthorizationFlow component
 // Note: defineExpose automatically unwraps refs, so we use the unwrapped types
@@ -4228,6 +4241,7 @@ interface TempUnschedRuleForm {
 
 // State
 const step = ref(1)
+const newAuthMethod = ref<'one-click' | 'manual'>('one-click')
 const submitting = ref(false)
 const accountCategory = ref<'oauth-based' | 'apikey' | 'bedrock' | 'service_account'>('oauth-based') // UI selection for account category
 const addMethod = ref<AddMethod>('oauth') // For oauth-based: 'oauth' or 'setup-token'
@@ -5411,6 +5425,7 @@ const submitCreateAccount = async (payload: CreateAccountRequest) => {
 
 // Methods
 const resetForm = () => {
+  newAuthMethod.value = 'one-click'
   step.value = 1
   form.name = ''
   form.notes = ''
@@ -6040,6 +6055,25 @@ const formatDateTimeLocal = formatDateTimeLocalInput
 const parseDateTimeLocal = parseDateTimeLocalInput
 
 // Create account and handle success/failure
+const handleNewAccountAuthorization = async (payload: NewAccountAuthorization, profileID: string, loginEmail: string) => {
+  if (submitting.value || !props.show || form.platform !== 'openai') return
+  submitting.value = true
+  try {
+    // Use the same account options as other OAuth creation methods.
+    const credentials = { ...payload.credentials }
+    const modelMapping = buildModelMappingObject(modelRestrictionMode.value, allowedModels.value, modelMappings.value)
+    if (modelMapping && !isOpenAIModelRestrictionDisabled.value) credentials.model_mapping = modelMapping
+    await createAccountAndFinish('openai', 'oauth', credentials, buildOpenAIExtra({
+      ...(payload.extra || {}),
+      one_click_auth_profile_id: profileID,
+      one_click_auth_login_email: loginEmail,
+      one_click_auth_enabled: false
+    }))
+  } finally {
+    submitting.value = false
+  }
+}
+
 const createAccountAndFinish = async (
   platform: AccountPlatform,
   type: AccountType,

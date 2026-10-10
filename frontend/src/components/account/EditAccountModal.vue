@@ -1707,11 +1707,7 @@
         <p v-if="account?.extra?.one_click_auth_last_status" class="mt-2 text-sm" :class="account.extra.one_click_auth_last_status === 'failed' ? 'text-red-600' : 'text-green-600'">{{ t('admin.accounts.authProfiles.lastAutomatic') }}: {{ account.extra.one_click_auth_last_at }} · {{ account.extra.one_click_auth_last_status }} · {{ account.extra.one_click_auth_last_code }} {{ account.extra.one_click_auth_last_error }}</p>
         <div class="mt-3 space-y-3">
           <label for="one-click-profile" class="input-label">{{ t('admin.accounts.oneClickAuth.profile') }}</label>
-          <select id="one-click-profile" v-model="oneClickAuthProfile" class="input" :disabled="authProfilesLoading">
-            <option value="">{{ t('admin.accounts.authProfiles.select') }}</option>
-            <option v-if="oneClickAuthProfile && !authProfiles.some(p => p.id === oneClickAuthProfile)" :value="oneClickAuthProfile" disabled>{{ t('admin.accounts.authProfiles.missing') }}</option>
-            <option v-for="profile in authProfiles" :key="profile.id" :value="profile.id" :disabled="!profile.enabled">{{ profile.name }} — {{ profile.mailbox_address }}</option>
-          </select>
+          <ReauthProfileSelect id="one-click-profile" v-model="oneClickAuthProfile" :profiles="authProfiles" :disabled="authProfilesLoading" />
           <div class="flex gap-2"><button type="button" class="btn btn-secondary" @click="showAuthProfileEditor = true">{{ t('admin.accounts.authProfiles.create') }}</button><button type="button" class="btn btn-secondary" :disabled="authProfilesLoading" @click="loadAuthProfiles">{{ t('common.refresh') }}</button></div>
           <p v-if="authProfilesError" role="alert" class="text-sm text-red-600">{{ authProfilesError }}</p>
           <label for="one-click-login-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
@@ -3176,6 +3172,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue'
 import ReauthProfileEditor from '@/components/account/ReauthProfileEditor.vue'
+import ReauthProfileSelect from '@/components/account/ReauthProfileSelect.vue'
 import { listReauthProfiles, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
@@ -5273,19 +5270,6 @@ const handleSubmit = async () => {
       }
     }
 
-    // One-click authorization is opt-in and is stored with the account so the
-    // account list can expose the shortcut without reopening this dialog.
-    if (props.account.platform === 'openai' && props.account.type === 'oauth') {
-      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
-      const newExtra = { ...currentExtra }
-      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim()) { newExtra.one_click_auth_auto_attempt = '' }
-      newExtra.one_click_auth_enabled = oneClickAuthEnabled.value
-      newExtra.one_click_auth_profile_id = oneClickAuthProfile.value
-      newExtra.one_click_auth_login_email = oneClickLoginEmail.value.trim()
-      delete newExtra.one_click_auth_profile
-      updatePayload.extra = newExtra
-    }
-
     // For apikey type, handle credentials update
     if (props.account.type === 'apikey') {
       const currentCredentials = (props.account.credentials as Record<string, unknown>) || {}
@@ -5973,6 +5957,21 @@ const handleSubmit = async () => {
       } else {
         delete newExtra.upstream_request_id_header
       }
+      updatePayload.extra = newExtra
+    }
+
+    // Apply the authorization binding after all platform settings have built extra.
+    // The binding is independent of the opt-in automatic authorization switch.
+    if (props.account.platform === 'openai' && props.account.type === 'oauth' && !isSparkShadow.value) {
+      const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
+      const newExtra = { ...currentExtra }
+      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim()) {
+        newExtra.one_click_auth_auto_attempt = ''
+      }
+      newExtra.one_click_auth_enabled = oneClickAuthEnabled.value
+      newExtra.one_click_auth_profile_id = oneClickAuthProfile.value
+      newExtra.one_click_auth_login_email = oneClickLoginEmail.value.trim()
+      delete newExtra.one_click_auth_profile
       updatePayload.extra = newExtra
     }
 

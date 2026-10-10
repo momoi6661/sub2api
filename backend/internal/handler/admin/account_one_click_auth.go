@@ -3,12 +3,14 @@ package admin
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/mail"
 	"net/url"
 	"reflect"
 	"strconv"
@@ -99,6 +101,89 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 	if account.Platform != service.PlatformOpenAI || !account.IsOAuth() || account.IsShadow() {
 		return nil, &service.ReauthExecutionError{Code: "ACCOUNT_NOT_SUPPORTED", Message: "Only non-shadow OpenAI OAuth accounts are supported"}
 	}
+	payload, err := h.authorizeReauthProfile(ctx, account)
+	if err != nil {
+		return nil, err
+	}
+	profileID := codexCredentialString(account.Extra, "one_click_auth_profile_id")
+	current, err := h.adminService.GetAccount(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] {
+		return nil, &service.ReauthExecutionError{Code: "ACCOUNT_CHANGED", Message: "Account credentials or authorization binding changed during this task"}
+	}
+	return h.applyOAuthCredentials(ctx, id, payload)
+}
+
+// AuthorizeNewAccount returns verified credentials without creating a placeholder account.
+func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	var input struct {
+		ProfileID  string `json:"profile_id" binding:"required,max=128"`
+		LoginEmail string `json:"login_email" binding:"required,max=254"`
+		ProxyID    *int64 `json:"proxy_id"`
+	}
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	if err := c.ShouldBindJSON(&input); err != nil {
+		response.BadRequest(c, "Select an authorization profile and enter a login email")
+		return
+	}
+	input.LoginEmail = strings.TrimSpace(input.LoginEmail)
+	address, err := mail.ParseAddress(input.LoginEmail)
+	if err != nil || address.Address != input.LoginEmail || (input.ProxyID != nil && *input.ProxyID < 1) {
+		response.BadRequest(c, "Invalid login email or proxy ID")
+		return
+	}
+	if h.reauthSettings == nil {
+		writeReauthError(c, &service.ReauthExecutionError{Code: "RUNNER_NOT_CONFIGURED", Message: "Authorization settings unavailable"})
+		return
+	}
+	ctx, cancel := context.WithTimeout(c.Request.Context(), 135*time.Second)
+	defer cancel()
+	// Keep email out of lock keys, and prevent repeat requests for the same draft.
+	digest := sha256.Sum256([]byte(input.ProfileID + "\x00" + strings.ToLower(input.LoginEmail)))
+	key := fmt.Sprintf("one_click_auth_draft:%x", digest)
+	if _, loaded := oneClickAccountLocks.LoadOrStore(key, true); loaded {
+		writeReauthError(c, &service.ReauthExecutionError{Code: "TASK_ALREADY_RUNNING", Message: "This email already has an authorization task"})
+		return
+	}
+	defer oneClickAccountLocks.Delete(key)
+	if h.reauthLocks != nil {
+		var nonce [16]byte
+		if _, err := rand.Read(nonce[:]); err != nil {
+			writeReauthError(c, err)
+			return
+		}
+		owner := hex.EncodeToString(nonce[:])
+		acquired, err := h.reauthLocks.TryAcquireLeaderLock(ctx, key, owner, 150*time.Second)
+		if err != nil || !acquired {
+			execution := &service.ReauthExecutionError{Code: "TASK_ALREADY_RUNNING", Message: "This email already has an authorization task"}
+			if err != nil {
+				execution = &service.ReauthExecutionError{Code: "TASK_LOCK_UNAVAILABLE", Message: "Authorization task lock unavailable", Retryable: true}
+			}
+			writeReauthError(c, execution)
+			return
+		}
+		defer func() {
+			releaseCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+			_ = h.reauthLocks.ReleaseLeaderLock(releaseCtx, key, owner)
+		}()
+	}
+	draft := &service.Account{Platform: service.PlatformOpenAI, Type: "oauth", ProxyID: input.ProxyID, Extra: map[string]any{
+		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail,
+	}}
+	payload, err := h.authorizeReauthProfile(ctx, draft)
+	if err != nil {
+		writeReauthError(c, err)
+		return
+	}
+	response.Success(c, payload)
+}
+
+// Shared execution keeps draft and existing-account authorization rules identical.
+func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *service.Account) (*ApplyOAuthCredentialsRequest, error) {
 	profileID := codexCredentialString(account.Extra, "one_click_auth_profile_id")
 	profiles, err := h.reauthSettings.ListReauthProfiles(ctx)
 	if err != nil {
@@ -131,7 +216,7 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 		resultType = "code"
 	}
 	task := service.ReauthRunnerTask{Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
-		"accountId": id, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
+		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
 	if profile.MailboxMode == "imap" {
 		task.Mailbox = &service.ReauthRunnerMailbox{Host: profile.IMAPHost, Port: profile.IMAPPort, Username: profile.IMAPUsername, Folder: profile.Folder, SenderFilter: profile.SenderFilter, CodePattern: profile.CodePattern}
@@ -199,18 +284,17 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 			return nil, &service.ReauthExecutionError{Code: "IDENTITY_MISMATCH", Message: "Authorized identity does not match this account"}
 		}
 		payload = &ApplyOAuthCredentialsRequest{Type: "oauth", Credentials: h.openaiOAuthService.BuildAccountCredentials(tokenInfo)}
+		if account.ID == 0 {
+			payload.Extra = map[string]any{"email": tokenInfo.Email}
+			if tokenInfo.PrivacyMode != "" {
+				payload.Extra["privacy_mode"] = tokenInfo.PrivacyMode
+			}
+		}
 	}
 	if err != nil {
 		return nil, &service.ReauthExecutionError{Code: "INVALID_AUTH_FILE", Message: err.Error()}
 	}
-	current, err := h.adminService.GetAccount(ctx, id)
-	if err != nil {
-		return nil, err
-	}
-	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] {
-		return nil, &service.ReauthExecutionError{Code: "ACCOUNT_CHANGED", Message: "Account credentials or authorization binding changed during this task"}
-	}
-	return h.applyOAuthCredentials(ctx, id, payload)
+	return payload, nil
 }
 
 // Pick once per task; OAuth login and token exchange must share the same route.

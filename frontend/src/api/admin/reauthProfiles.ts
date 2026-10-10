@@ -39,6 +39,11 @@ export async function deleteReauthProfile(id: string): Promise<void> {
   await apiClient.delete(`/admin/reauth-profiles/${id}`)
 }
 
+export async function readReauthSecret(id: string, signal?: AbortSignal): Promise<string> {
+  const { data } = await apiClient.post<{ secret: string }>(`/admin/reauth-profiles/${id}/secret`, {}, { signal })
+  return data.secret
+}
+
 export interface ReauthScriptMaterial {
   code_script: string
   secret: string
@@ -57,6 +62,21 @@ export async function applyReauthFile(accountID: number, content: string): Promi
 
 export async function runOneClickAuth(accountID: number): Promise<Account> {
   const { data } = await apiClient.post<Account>(`/admin/accounts/${accountID}/one-click-auth`, {}, { timeout: 145_000 })
+  return data
+}
+
+export interface NewAccountAuthorization {
+  type: 'oauth'
+  credentials: Record<string, unknown>
+  extra?: Record<string, unknown>
+}
+
+export async function authorizeNewAccount(
+  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal
+): Promise<NewAccountAuthorization> {
+  const { data } = await apiClient.post<NewAccountAuthorization>('/admin/accounts/one-click-auth', {
+    profile_id: profileID, login_email: loginEmail, proxy_id: proxyID
+  }, { timeout: 145_000, signal })
   return data
 }
 

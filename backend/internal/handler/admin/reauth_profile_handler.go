@@ -87,3 +87,12 @@ func (h *SettingHandler) ReadReauthScript(c *gin.Context) {
 	}
 	response.Success(c, material)
 }
+
+func (h *SettingHandler) ReadReauthSecret(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
+	secret, err := h.settingService.ReadReauthSecret(c.Request.Context(), c.Param("id"))
+	if response.ErrorFrom(c, err) {
+		return
+	}
+	response.Success(c, map[string]string{"secret": secret})
+}

@@ -25,7 +25,18 @@
         <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
         <p v-if="testResult" role="status" class="text-sm text-green-600">{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
       </div>
-      <div><label for="auth-profile-secret" class="input-label">{{ t('admin.accounts.authProfiles.secret') }}</label><input id="auth-profile-secret" v-model="form.secret" class="input" type="password" autocomplete="new-password" /><p class="input-hint">{{ t(form.has_secret ? 'admin.accounts.authProfiles.secretKeep' : 'admin.accounts.authProfiles.secretHint') }}</p></div>
+      <div>
+        <div v-if="show && form.id && form.has_secret" class="mb-3 rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
+          <p class="mb-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.accounts.authProfiles.currentSecret') }}</p>
+          <ReauthProfileSecret :profile-id="form.id" :has-secret="form.has_secret" />
+        </div>
+        <label for="auth-profile-secret" class="input-label">{{ t('admin.accounts.authProfiles.secret') }}</label>
+        <div class="relative">
+          <input id="auth-profile-secret" v-model="form.secret" class="input pr-12" :type="showSecret ? 'text' : 'password'" autocomplete="new-password" />
+          <button type="button" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-gray-500 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:text-white" :aria-label="t(showSecret ? 'admin.accounts.authProfiles.hideSecret' : 'admin.accounts.authProfiles.showSecret')" :aria-pressed="showSecret" @click="showSecret = !showSecret"><Icon :name="showSecret ? 'eyeOff' : 'eye'" size="md" /></button>
+        </div>
+        <p class="input-hint">{{ t(form.has_secret ? 'admin.accounts.authProfiles.secretKeep' : 'admin.accounts.authProfiles.secretHint') }}</p>
+      </div>
       <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label for="auth-profile-folder" class="input-label">{{ t('admin.accounts.authProfiles.folder') }}</label><input id="auth-profile-folder" v-model="form.folder" class="input" /></div>
         <div><label for="auth-profile-sender" class="input-label">{{ t('admin.accounts.authProfiles.sender') }}</label><input id="auth-profile-sender" v-model="form.sender_filter" class="input" /></div>
@@ -42,6 +53,8 @@
 import { ref, watch, onBeforeUnmount, computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import Icon from '@/components/icons/Icon.vue'
+import ReauthProfileSecret from './ReauthProfileSecret.vue'
 import ReauthScriptRules from './ReauthScriptRules.vue'
 import { saveReauthProfile, testReauthScript, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { getAll } from '@/api/admin/proxies'
@@ -54,6 +67,7 @@ const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbo
 const form = ref(defaults())
 const proxies = ref<Proxy[]>([])
 const saving = ref(false)
+const showSecret = ref(false)
 const error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const testEmail = ref(''), testResult = ref(''), testing = ref(false)
 let testAbort: AbortController | null = null
@@ -78,6 +92,7 @@ async function testScript() {
 }
 onBeforeUnmount(() => testAbort?.abort())
 watch(() => props.show, async show => {
+  showSecret.value = false
   testAbort?.abort(); testResult.value = ''; testEmail.value = ''
   if (!show) { form.value.secret = ''; form.value.code_script = ''; return }
   form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '' } : defaults()

@@ -22,7 +22,7 @@ import (
 const reauthProfilePrefix = "one_click_auth_profile."
 
 // ReauthProfile describes a shared inbox, not the upstream account's login identity.
-// Secrets are write-only; storage uses a separate encrypted field.
+// List responses omit secrets; explicit administrator reads decrypt them on demand.
 type ReauthProfile struct {
 	ID             string  `json:"id"`
 	Name           string  `json:"name"`
@@ -223,6 +223,23 @@ func (s *SettingService) ReadReauthMaterial(ctx context.Context, id string) (map
 	return s.readReauthMaterial(ctx, id, false)
 }
 
+// ReadReauthSecret permits administrators to inspect saved credentials even when
+// the profile is disabled, without returning the script or enabling execution.
+func (s *SettingService) ReadReauthSecret(ctx context.Context, id string) (string, error) {
+	if !validReauthProfileID(id) {
+		return "", infraerrors.BadRequest("INVALID_AUTH_PROFILE", "invalid profile ID")
+	}
+	value, err := s.settingRepo.GetValue(ctx, reauthProfilePrefix+id)
+	if err != nil {
+		return "", err
+	}
+	var stored storedReauthProfile
+	if err := json.Unmarshal([]byte(value), &stored); err != nil {
+		return "", err
+	}
+	return s.decryptReauthValue(id, stored.EncryptedSecret, "")
+}
+
 func (s *SettingService) readReauthMaterial(ctx context.Context, id string, scriptOnly bool) (map[string]string, error) {
 	if !validReauthProfileID(id) {
 		return nil, infraerrors.BadRequest("INVALID_AUTH_PROFILE", "invalid profile ID")
@@ -238,41 +255,42 @@ func (s *SettingService) readReauthMaterial(ctx context.Context, id string, scri
 	if !stored.Enabled || (scriptOnly && stored.MailboxMode != "api") || (stored.MailboxMode == "api" && stored.EncryptedScript == "") || (stored.MailboxMode == "imap" && stored.EncryptedSecret == "") {
 		return nil, infraerrors.BadRequest("AUTH_SCRIPT_UNAVAILABLE", "enabled API profile with code is required")
 	}
-	if s.cfg == nil || !s.cfg.Totp.EncryptionKeyConfigured {
-		return nil, infraerrors.BadRequest("AUTH_SCRIPT_UNAVAILABLE", "fixed secret encryption key required")
-	}
-	key, err := hex.DecodeString(s.cfg.Totp.EncryptionKey)
+	script, err := s.decryptReauthValue(id, stored.EncryptedScript, ".script")
 	if err != nil {
 		return nil, err
 	}
-	block, err := aes.NewCipher(key)
-	if err != nil {
-		return nil, err
-	}
-	gcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-	open := func(encoded, purpose string) (string, error) {
-		if encoded == "" {
-			return "", nil
-		}
-		data, err := base64.StdEncoding.DecodeString(encoded)
-		if err != nil || len(data) < gcm.NonceSize() {
-			return "", fmt.Errorf("invalid encrypted authorization material")
-		}
-		plain, err := gcm.Open(nil, data[:gcm.NonceSize()], data[gcm.NonceSize():], []byte(reauthProfilePrefix+id+purpose))
-		return string(plain), err
-	}
-	script, err := open(stored.EncryptedScript, ".script")
-	if err != nil {
-		return nil, err
-	}
-	secret, err := open(stored.EncryptedSecret, "")
+	secret, err := s.decryptReauthValue(id, stored.EncryptedSecret, "")
 	if err != nil {
 		return nil, err
 	}
 	return map[string]string{"code_script": script, "secret": secret, "api_url": stored.APIURL, "mailbox_address": stored.MailboxAddress}, nil
+}
+
+func (s *SettingService) decryptReauthValue(id, encoded, purpose string) (string, error) {
+	if encoded == "" {
+		return "", nil
+	}
+	if s.cfg == nil || !s.cfg.Totp.EncryptionKeyConfigured {
+		return "", infraerrors.BadRequest("AUTH_SCRIPT_UNAVAILABLE", "fixed secret encryption key required")
+	}
+	key, err := hex.DecodeString(s.cfg.Totp.EncryptionKey)
+	if err != nil {
+		return "", err
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", err
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", err
+	}
+	data, err := base64.StdEncoding.DecodeString(encoded)
+	if err != nil || len(data) < gcm.NonceSize() {
+		return "", fmt.Errorf("invalid encrypted authorization material")
+	}
+	plain, err := gcm.Open(nil, data[:gcm.NonceSize()], data[gcm.NonceSize():], []byte(reauthProfilePrefix+id+purpose))
+	return string(plain), err
 }
 
 func (s *SettingService) DeleteReauthProfile(ctx context.Context, id string) error {

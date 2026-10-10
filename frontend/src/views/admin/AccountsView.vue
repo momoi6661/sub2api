@@ -500,7 +500,7 @@
     <ErrorPassthroughRulesModal :show="showErrorPassthrough" @close="showErrorPassthrough = false" />
     <TLSFingerprintProfilesModal :show="showTLSFingerprintProfiles" @close="showTLSFingerprintProfiles = false" />
     <BaseDialog :show="showAuthBinding" :title="t('admin.accounts.authProfiles.batch')" @close="showAuthBinding = false">
-      <select v-model="bindingProfileID" class="input" :disabled="authBindingBusy"><option value="">{{ t('admin.accounts.authProfiles.select') }}</option><option v-for="profile in bindingProfiles" :key="profile.id" :value="profile.id" :disabled="!profile.enabled">{{ profile.name }}</option></select>
+      <ReauthProfileSelect v-model="bindingProfileID" :profiles="bindingProfiles" :disabled="authBindingBusy" />
       <p v-if="bindingError" role="alert" class="mt-3 text-red-600">{{ bindingError }}</p>
       <template #footer><button class="btn btn-secondary" :disabled="authBindingBusy" @click="showAuthBinding = false">{{ t('common.cancel') }}</button><button class="btn btn-primary" :disabled="authBindingBusy || !bindingProfileID" @click="bindAuthProfile">{{ t('common.save') }}</button></template>
     </BaseDialog>
@@ -512,6 +512,7 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
 import { useIntervalFn } from '@vueuse/core'
 import BaseDialog from '@/components/common/BaseDialog.vue'
+import ReauthProfileSelect from '@/components/account/ReauthProfileSelect.vue'
 import { useI18n } from 'vue-i18n'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
@@ -2430,7 +2431,7 @@ async function bindAuthProfile() {
     for (const id of bindingAccountIDs) {
       const account = await adminAPI.accounts.getById(id)
       if (!canOneClickAuthorize(account)) continue
-      await adminAPI.accounts.update(id, { extra: { ...account.extra, one_click_auth_profile_id: bindingProfileID.value } })
+      await adminAPI.accounts.update(id, { extra: { ...account.extra, one_click_auth_profile_id: bindingProfileID.value, one_click_auth_auto_attempt: '' } })
       count++
     }
     showAuthBinding.value = false

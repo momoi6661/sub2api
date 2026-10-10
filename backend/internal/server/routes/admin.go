@@ -395,6 +395,7 @@ func registerAccountRoutes(admin *gin.RouterGroup, h *handler.Handlers, stepUpAu
 		accounts.POST("/:id/refresh", h.Admin.Account.Refresh)
 		accounts.POST("/:id/apply-oauth-credentials", h.Admin.Account.ApplyOAuthCredentials)
 		accounts.POST("/:id/apply-reauth-file", h.Admin.Account.ApplyReauthFile)
+		accounts.POST("/one-click-auth", h.Admin.Account.AuthorizeNewAccount)
 		accounts.POST("/:id/one-click-auth", h.Admin.Account.RunOneClickAuth)
 		accounts.POST("/:id/set-privacy", h.Admin.Account.SetPrivacy)
 		accounts.POST("/:id/refresh-tier", h.Admin.Account.RefreshTier)
@@ -574,6 +575,7 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	profiles.PUT("/:id", h.Admin.Setting.SaveReauthProfile)
 	profiles.DELETE("/:id", h.Admin.Setting.DeleteReauthProfile)
 	profiles.POST("/:id/script-material", h.Admin.Setting.ReadReauthScript)
+	profiles.POST("/:id/secret", h.Admin.Setting.ReadReauthSecret)
 	adminSettings := admin.Group("/settings")
 	{
 		adminSettings.GET("", h.Admin.Setting.GetSettings)

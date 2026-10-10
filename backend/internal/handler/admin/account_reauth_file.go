@@ -14,9 +14,8 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// normalizeReauthAuthFile only accepts one identity and targets an existing
-// account. Unlike batch import, it never creates accounts or selects a target
-// based on the returned JSON.
+// normalizeReauthAuthFile accepts one identity matching the requested account
+// or draft login email. It never creates accounts or chooses the target from JSON.
 func normalizeReauthAuthFile(content string, existing *service.Account) (*ApplyOAuthCredentialsRequest, error) {
 	if existing == nil || existing.Platform != service.PlatformOpenAI || !existing.IsOAuth() || existing.ParentAccountID != nil {
 		return nil, errors.New("authorization files require a non-shadow OpenAI OAuth account")

@@ -562,6 +562,10 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		item.AccountID = firstCodexString(raw,
 			[]string{"chatgpt_account_id"},
 			[]string{"chatgptAccountId"},
+			[]string{"tokens", "chatgpt_account_id"},
+			[]string{"tokens", "chatgptAccountId"},
+			[]string{"tokens", "account_id"},
+			[]string{"tokens", "accountId"},
 			[]string{"account_id"},
 			[]string{"accountId"},
 			[]string{"account", "id"},
@@ -578,6 +582,8 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		item.PlanType = firstCodexString(raw,
 			[]string{"plan_type"},
 			[]string{"planType"},
+			[]string{"tokens", "plan_type"},
+			[]string{"tokens", "planType"},
 			[]string{"account", "plan_type"},
 			[]string{"account", "planType"},
 		)
@@ -589,6 +595,10 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 		)
 		item.Workspace = firstCodexString(raw,
 			[]string{"workspace"}, []string{"workspace_name"}, []string{"workspaceName"},
+			[]string{"workspace_id"}, []string{"workspaceId"},
+			[]string{"tokens", "workspace"}, []string{"tokens", "workspace_name"},
+			[]string{"tokens", "workspaceName"}, []string{"tokens", "workspace_id"},
+			[]string{"tokens", "workspaceId"},
 			[]string{"account", "workspace"}, []string{"account", "workspace_name"},
 		)
 		item.Name = firstCodexString(raw, []string{"name"}, []string{"user", "name"})
@@ -641,6 +651,11 @@ func normalizeCodexImportEntry(entry codexImportEntry) (*codexImportAccount, err
 	}
 	if err := enrichCodexImportAccountFromJWT(item, item.AccessToken, true, now); err != nil {
 		return nil, err
+	}
+	if item.Workspace == "" {
+		// auth.json exports commonly carry the selected ChatGPT workspace as
+		// tokens.account_id even when the access token is opaque.
+		item.Workspace = strings.TrimSpace(item.AccountID)
 	}
 	if _, ok := item.Credentials["expires_at"]; !ok {
 		item.WarningTexts = append(item.WarningTexts, "无法从 accessToken 解析过期时间，导入后需自行确认令牌有效性")

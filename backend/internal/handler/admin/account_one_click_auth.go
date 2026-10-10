@@ -11,7 +11,6 @@ import (
 	"math/big"
 	"net/http"
 	"net/mail"
-	"net/url"
 	"reflect"
 	"strconv"
 	"strings"
@@ -255,7 +254,6 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 		}
 	}
 
-	var sessionID string
 	authProgress(ctx, "connecting")
 	proxyID, err := chooseReauthProxy(profile, account.ProxyID)
 	if err != nil {
@@ -276,89 +274,49 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if resultType == "auth_file" {
 		authProgress(ctx, "authorization_file")
 	} else {
-		authProgress(ctx, "browser_authorization")
+		task.Mode = "oauth_protocol"
+		task.Context["expectedAccountID"] = codexCredentialString(account.Credentials, "chatgpt_account_id")
+		authProgress(ctx, "protocol_authorization")
 	}
-	// Every attempt owns a new OAuth session; always discard unused PKCE state.
-	defer func() {
-		if sessionID != "" {
-			h.openaiOAuthService.CancelAuthSession(sessionID)
-		}
-	}()
-	var result *service.ReauthRunnerResult
-	for attempt := 0; attempt < 2; attempt++ {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-		if resultType == "code" {
-			if h.openaiOAuthService == nil {
-				return nil, &service.ReauthExecutionError{Code: "OAUTH_UNAVAILABLE", Message: "OAuth service unavailable"}
-			}
-			if sessionID != "" {
-				h.openaiOAuthService.CancelAuthSession(sessionID)
-				sessionID = ""
-			}
-			task.Mode = "browser"
-			task.RedirectURI = "http://localhost:1455/auth/callback"
-			auth, authErr := h.openaiOAuthService.GenerateAuthURL(ctx, proxyID, task.RedirectURI, service.PlatformOpenAI)
-			if authErr != nil {
-				return nil, authErr
-			}
-			task.AuthURL, sessionID = auth.AuthURL, auth.SessionID
-			u, parseErr := url.Parse(auth.AuthURL)
-			if parseErr != nil {
-				return nil, parseErr
-			}
-			task.State = u.Query().Get("state")
-		}
-		result, err = service.ExecuteReauthRunner(ctx, task)
-		if err == nil {
-			break
-		}
-		var execution *service.ReauthExecutionError
-		// Only retry before email submission: never send duplicate codes or replay scripts.
-		if attempt != 0 || resultType != "code" || !errors.As(err, &execution) || !execution.Retryable ||
-			(execution.Code != "AUTH_PAGE_HTTP_ERROR" && execution.Code != "BROWSER_NAVIGATION_FAILED") {
-			return nil, err
-		}
-		authProgress(ctx, "authorization_retry")
+	result, err := service.ExecuteReauthRunner(ctx, task)
+	if err != nil {
+		return nil, err
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	var payload *ApplyOAuthCredentialsRequest
 	authProgress(ctx, "verifying")
-	if resultType == "auth_file" {
-		content := string(result.Auth)
-		var text string
-		if json.Unmarshal(result.Auth, &text) == nil {
-			content = text
-		}
-		payload, err = normalizeReauthAuthFile(content, account)
-	} else {
-		if result.State != task.State || result.Code == "" {
-			return nil, &service.ReauthExecutionError{Code: "OAUTH_CALLBACK_INVALID", Message: "OAuth callback state or code invalid"}
-		}
-		tokenInfo, exchangeErr := h.openaiOAuthService.ExchangeCode(ctx, &service.OpenAIExchangeCodeInput{SessionID: sessionID, Code: result.Code, State: result.State, RedirectURI: task.RedirectURI, ProxyID: proxyID})
-		if exchangeErr != nil {
-			return nil, exchangeErr
-		}
-		if !strings.EqualFold(email, tokenInfo.Email) {
-			return nil, &service.ReauthExecutionError{Code: "IDENTITY_MISMATCH", Message: "Authorized email does not match this account"}
-		}
-		expectedID := codexCredentialString(account.Credentials, "chatgpt_account_id")
-		if expectedID != "" && expectedID != tokenInfo.ChatGPTAccountID {
-			return nil, &service.ReauthExecutionError{Code: "IDENTITY_MISMATCH", Message: "Authorized identity does not match this account"}
-		}
-		payload = &ApplyOAuthCredentialsRequest{Type: "oauth", Credentials: h.openaiOAuthService.BuildAccountCredentials(tokenInfo)}
-		if account.ID == 0 {
-			payload.Extra = map[string]any{"email": tokenInfo.Email}
-			if tokenInfo.PrivacyMode != "" {
-				payload.Extra["privacy_mode"] = tokenInfo.PrivacyMode
-			}
-		}
+	content := string(result.Auth)
+	var text string
+	if json.Unmarshal(result.Auth, &text) == nil {
+		content = text
 	}
+	payload, err := normalizeReauthAuthFile(content, account)
 	if err != nil {
 		return nil, &service.ReauthExecutionError{Code: "INVALID_AUTH_FILE", Message: err.Error()}
+	}
+	// Keep the former code-login enrichment and privacy setup on the same proxy.
+	if resultType == "code" && h.openaiOAuthService != nil {
+		credentials := payload.Credentials
+		expires, _ := time.Parse(time.RFC3339, codexCredentialString(credentials, "expires_at"))
+		tokenInfo := &service.OpenAITokenInfo{
+			AccessToken: codexCredentialString(credentials, "access_token"), RefreshToken: codexCredentialString(credentials, "refresh_token"),
+			IDToken: codexCredentialString(credentials, "id_token"), ClientID: codexCredentialString(credentials, "client_id"), ExpiresAt: expires.Unix(),
+			Email: codexCredentialString(credentials, "email"), ChatGPTAccountID: codexCredentialString(credentials, "chatgpt_account_id"),
+			ChatGPTUserID: codexCredentialString(credentials, "chatgpt_user_id"), OrganizationID: codexCredentialString(credentials, "organization_id"),
+			PlanType: codexCredentialString(credentials, "plan_type"),
+		}
+		h.openaiOAuthService.EnrichAuthorizedTokenInfo(ctx, tokenInfo, task.ProxyURL)
+		if !strings.EqualFold(email, tokenInfo.Email) || tokenInfo.ChatGPTAccountID != codexCredentialString(credentials, "chatgpt_account_id") {
+			return nil, &service.ReauthExecutionError{Code: "IDENTITY_MISMATCH", Message: "Authorized identity does not match this account"}
+		}
+		payload.Credentials = service.MergeCredentials(credentials, h.openaiOAuthService.BuildAccountCredentials(tokenInfo))
+		if account.ID == 0 && tokenInfo.PrivacyMode != "" {
+			payload.Extra["privacy_mode"] = tokenInfo.PrivacyMode
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return payload, nil
 }

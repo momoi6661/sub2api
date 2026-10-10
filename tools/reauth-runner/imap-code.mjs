@@ -3,6 +3,8 @@ import { simpleParser } from 'mailparser'
 
 const error = (code, message, retryable = false) => ({ type: 'error', error: { code, message, retryable } })
 const addresses = value => (value?.value || []).flatMap(item => item.group || [item]).map(item => (item.address || '').toLowerCase())
+// IMAP INTERNALDATE has second precision; the UID snapshot excludes older mail.
+const deliveryStart = task => Math.floor(Date.parse(task.context.since) / 1000) * 1000
 
 // Match actual delivery headers as well as To/Cc, including forwarded aliases.
 export function matchMailboxMessage(parsed, internalDate, task) {
@@ -12,7 +14,7 @@ export function matchMailboxMessage(parsed, internalDate, task) {
     return typeof raw === 'string' ? raw.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+/gi) || [] : addresses(raw)
   }).map(value => value.toLowerCase())
   if (![...addresses(parsed.to), ...addresses(parsed.cc), ...delivered].includes(recipient)) return null
-  if (!(internalDate instanceof Date) || internalDate.getTime() < Date.parse(task.context.since)) return null
+  if (!(internalDate instanceof Date) || !Number.isFinite(internalDate.getTime()) || !Number.isFinite(deliveryStart(task)) || internalDate.getTime() < deliveryStart(task)) return null
   if (task.mailbox.senderFilter && !addresses(parsed.from).includes(task.mailbox.senderFilter.toLowerCase())) return null
   const body = `${parsed.subject || ''}\n${parsed.text || ''}`.slice(0, 100000)
   const match = new RegExp(task.mailbox.codePattern).exec(body)
@@ -39,7 +41,7 @@ export async function executeMailbox(task) {
       if (fresh.length) {
         const messages = await client.fetchAll(fresh, { internalDate: true, size: true, uid: true }, { uid: true })
         for (const message of messages.sort((a,b) => b.uid-a.uid)) {
-          if (message.size > 1024*1024 || message.internalDate?.getTime() < Date.parse(task.context.since)) continue
+          if (message.size > 1024*1024 || message.internalDate?.getTime() < deliveryStart(task)) continue
           const fetched = await client.fetchOne(message.uid, { source: true }, { uid: true })
           if (!fetched?.source || fetched.source.length > 1024*1024) continue
           const parsed = await simpleParser(fetched.source, { skipHtmlToText: false, skipTextToHtml: true })

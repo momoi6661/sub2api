@@ -312,6 +312,12 @@ func (s *OpenAIOAuthService) enrichTokenInfo(ctx context.Context, tokenInfo *Ope
 	tokenInfo.PrivacyMode = disableOpenAITraining(ctx, s.privacyClientFactory, tokenInfo.AccessToken, proxyURL)
 }
 
+// EnrichAuthorizedTokenInfo preserves account metadata and privacy setup when
+// a protocol runner, rather than ExchangeCode, supplies verified credentials.
+func (s *OpenAIOAuthService) EnrichAuthorizedTokenInfo(ctx context.Context, tokenInfo *OpenAITokenInfo, proxyURL string) {
+	s.enrichTokenInfo(ctx, tokenInfo, proxyURL)
+}
+
 func shouldApplyChatGPTAccountInfoPlanType(current, candidate string) bool {
 	return strings.TrimSpace(candidate) != "" && strings.TrimSpace(current) == ""
 }

@@ -60,7 +60,7 @@ export async function applyReauthFile(accountID: number, content: string): Promi
   return data
 }
 
-export type AuthorizationStage = 'preparing' | 'configuration' | 'connecting' | 'browser_authorization' | 'authorization_retry' | 'authorization_file' | 'verifying' | 'saving' | 'mailbox_connect' | 'browser_start' | 'email_login' | 'requesting_code' | 'waiting_code' | 'submitting_code' | 'consent'
+export type AuthorizationStage = 'preparing' | 'configuration' | 'connecting' | 'protocol_authorization' | 'protocol_start' | 'token_exchange' | 'browser_authorization' | 'authorization_retry' | 'authorization_file' | 'verifying' | 'saving' | 'mailbox_connect' | 'browser_start' | 'email_login' | 'requesting_code' | 'waiting_code' | 'submitting_code' | 'consent'
 export interface AuthorizationProgress { event: 'progress'; stage: AuthorizationStage }
 export type ProgressCallback = (progress: AuthorizationProgress) => void
 

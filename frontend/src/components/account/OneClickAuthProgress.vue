@@ -36,10 +36,10 @@ const { t } = useI18n()
 const now = ref(Date.now())
 const running = computed(() => props.status === 'running')
 const elapsed = computed(() => Math.max(0, Math.floor(((props.finishedAt || now.value) - props.startedAt) / 1000)))
-const stages: AuthorizationStage[] = ['configuration', 'connecting', 'browser_authorization', 'verifying', 'saving']
+const stages: AuthorizationStage[] = ['configuration', 'connecting', 'protocol_authorization', 'verifying', 'saving']
 const activeIndex = computed(() => {
   if (props.status === 'succeeded') return 4
-  if (['authorization_retry', 'authorization_file', 'mailbox_connect', 'browser_start', 'email_login', 'requesting_code', 'waiting_code', 'submitting_code', 'consent'].includes(props.stage)) return 2
+  if (['protocol_start', 'token_exchange', 'browser_authorization', 'authorization_retry', 'authorization_file', 'mailbox_connect', 'browser_start', 'email_login', 'requesting_code', 'waiting_code', 'submitting_code', 'consent'].includes(props.stage)) return 2
   return Math.max(0, stages.indexOf(props.stage))
 })
 let timer: ReturnType<typeof setInterval> | undefined

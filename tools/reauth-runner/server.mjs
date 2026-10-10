@@ -1,6 +1,7 @@
 import http from 'node:http'
 import { timingSafeEqual } from 'node:crypto'
-import { executeScript, authorizeWithBrowser, failure } from './executor.mjs'
+import { executeScript, failure } from './executor.mjs'
+import { authorizeWithProtocol } from './protocol-auth.mjs'
 
 const token = process.env.REAUTH_RUNNER_TOKEN || ''
 if (token.length < 32) throw new Error('REAUTH_RUNNER_TOKEN must contain at least 32 characters')
@@ -34,19 +35,15 @@ const server = http.createServer(async (request, response) => {
     if (task.operation) throw new Error('operation')
     if (task.mailbox) {
       const m = task.mailbox
-      if (task.mode !== 'browser' || task.resultType !== 'code' || typeof m.host !== 'string' || !m.host || /[\s/:@]/.test(m.host) || !Number.isInteger(m.port) || m.port < 1 || m.port > 65535 || typeof m.codePattern !== 'string' || m.codePattern.length > 500 || !task.context.secret) throw new Error('mailbox')
+      if (task.mode !== 'oauth_protocol' || task.resultType !== 'code' || typeof m.host !== 'string' || !m.host || /[\s/:@]/.test(m.host) || !Number.isInteger(m.port) || m.port < 1 || m.port > 65535 || typeof m.codePattern !== 'string' || m.codePattern.length > 500 || !task.context.secret) throw new Error('mailbox')
     } else if (!task.script.trim()) throw new Error('script')
     let result
-    if (task.mode === 'browser') {
-      const auth = new URL(task.authURL)
-      if (auth.protocol !== 'https:' || auth.hostname !== 'auth.openai.com') throw new Error('auth')
-      if (task.redirectURI !== 'http://localhost:1455/auth/callback') throw new Error('callback')
-      const { chromium } = await import('playwright')
-      result = await authorizeWithBrowser(task, chromium, controller.signal, report)
+    if (task.mode === 'oauth_protocol' && task.resultType === 'code') {
+      result = await authorizeWithProtocol(task, executeScript, controller.signal, report)
     } else if (task.mode === 'protocol') result = await executeScript(task, { signal: controller.signal })
     else throw new Error('mode')
     finish(result)
-  } catch { if (!response.headersSent) response.statusCode = 400; finish(failure('INVALID_RUNNER_TASK', 'Invalid execution task or unavailable Playwright installation')) }
+  } catch { if (!response.headersSent) response.statusCode = 400; finish(failure('INVALID_RUNNER_TASK', 'Invalid protocol execution task')) }
   finally { active--; clearTimeout(timer) }
 })
 server.requestTimeout = 125000

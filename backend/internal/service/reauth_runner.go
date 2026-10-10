@@ -33,16 +33,13 @@ type ReauthRunnerMailbox struct {
 }
 
 type ReauthRunnerTask struct {
-	OnProgress  func(string)         `json:"-"`
-	Mailbox     *ReauthRunnerMailbox `json:"mailbox,omitempty"`
-	Mode        string               `json:"mode"`
-	Script      string               `json:"script"`
-	ResultType  string               `json:"resultType"`
-	Context     map[string]any       `json:"context"`
-	AuthURL     string               `json:"authURL,omitempty"`
-	RedirectURI string               `json:"redirectURI,omitempty"`
-	State       string               `json:"state,omitempty"`
-	ProxyURL    string               `json:"proxyURL,omitempty"`
+	OnProgress func(string)         `json:"-"`
+	Mailbox    *ReauthRunnerMailbox `json:"mailbox,omitempty"`
+	Mode       string               `json:"mode"`
+	Script     string               `json:"script"`
+	ResultType string               `json:"resultType"`
+	Context    map[string]any       `json:"context"`
+	ProxyURL   string               `json:"proxyURL,omitempty"`
 }
 
 type ReauthRunnerResult struct {
@@ -103,7 +100,7 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 			}
 			if json.Unmarshal(line, &progress) == nil && progress.Event == "progress" {
 				switch progress.Stage {
-				case "mailbox_connect", "browser_start", "email_login", "requesting_code", "waiting_code", "submitting_code", "consent":
+				case "mailbox_connect", "protocol_start", "email_login", "requesting_code", "waiting_code", "submitting_code", "consent", "token_exchange":
 					if task.OnProgress != nil {
 						task.OnProgress(progress.Stage)
 					}
@@ -135,7 +132,7 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	if resp.StatusCode != http.StatusOK {
 		return nil, &ReauthExecutionError{Code: "RUNNER_REJECTED", Message: fmt.Sprintf("Runner rejected the request (HTTP %d)", resp.StatusCode), Retryable: resp.StatusCode == 429}
 	}
-	if (task.Mode == "browser" && result.Type != "oauth_callback") || (task.Mode == "protocol" && result.Type != task.ResultType) {
+	if (task.Mode == "oauth_protocol" && result.Type != "auth_file") || (task.Mode == "protocol" && result.Type != task.ResultType) {
 		return nil, &ReauthExecutionError{Code: "RESULT_TYPE_MISMATCH", Message: "Runner result type does not match the task"}
 	}
 	return &result, nil

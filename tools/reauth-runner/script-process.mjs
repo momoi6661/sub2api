@@ -6,19 +6,8 @@ let result
 try {
   const task = JSON.parse(input)
   if (task.proxyURL) {
-    const { default: fetch } = await import('node-fetch')
-    const proxy = new URL(task.proxyURL)
-    let agent
-    if (['socks:', 'socks4:', 'socks5:', 'socks4a:', 'socks5h:'].includes(proxy.protocol)) {
-      const { SocksProxyAgent } = await import('socks-proxy-agent')
-      agent = new SocksProxyAgent(task.proxyURL)
-    } else if (['http:', 'https:'].includes(proxy.protocol)) {
-      const { HttpProxyAgent } = await import('http-proxy-agent')
-      const { HttpsProxyAgent } = await import('https-proxy-agent')
-      const http = new HttpProxyAgent(task.proxyURL), https = new HttpsProxyAgent(task.proxyURL)
-      agent = target => target.protocol === 'https:' ? https : http
-    } else throw new Error('Unsupported authorization proxy protocol')
-    globalThis.fetch = (url, options = {}) => fetch(url, { ...options, agent })
+    const { createProxyFetch } = await import('./proxy-fetch.mjs')
+    globalThis.fetch = createProxyFetch(task.proxyURL).fetch
   }
   if (task.mailbox) {
     const { executeMailbox } = await import('./imap-code.mjs')

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.mjs"
+    "start": "node server.mjs",
+    "test": "node --test *.test.mjs"
   },
   "dependencies": {
     "http-proxy-agent": "^7.0.2",
@@ -11,7 +12,7 @@
     "imapflow": "^2.4.0",
     "mailparser": "^3.9.38",
     "node-fetch": "^3.3.2",
-    "playwright": "1.58.2",
-    "socks-proxy-agent": "^8.0.5"
+    "socks-proxy-agent": "^8.0.5",
+    "tough-cookie": "^6.0.0"
   }
 }

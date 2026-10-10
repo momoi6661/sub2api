@@ -26,10 +26,12 @@ mobile cards. Distinguish an empty library from a search with no matches.
 The existing list shortcut remains visible for supported accounts during testing.
 It executes the bound profile on the server and reports structured errors.
 A proxy pool permits multiple choices. Each account independently selects one
-proxy per task, retained for both headless browser login and token exchange.
+proxy per task, retained for protocol login, script requests and token exchange.
 An empty pool falls back to the account proxy. Distribution is not a guarantee
 against provider risk checks. Authorization-file scripts use the protocol path;
-mailbox-code login uses an isolated Playwright context. Script requests receive
+mailbox-code login uses an isolated HTTP cookie session and task-local PKCE.
+Only existing accounts are authorized; registration/profile creation and manual
+verification stop the task. Protocol login returns an identity-checked auth file. Script requests receive
 context.proxyURL so custom authorization logic can use the chosen route.
 
 Forms collapse to one column on narrow screens; tables use local horizontal
@@ -64,8 +66,8 @@ Draft creation remains cancellable and preserves its result only in the open dia
 
 Account management has only shortcuts and busy states, not a task panel. Active
 history updates every four seconds while the page is visible; hidden/unmounted or
-idle pages do not poll. Runner events distinguish mailbox connection, browser start,
-email submission, code request, code reading/submission, consent, verification and
+idle pages do not poll. Runner events distinguish mailbox connection, protocol start,
+email submission, code request, code reading/submission, consent, token exchange, verification and
 saving. Never show an invented percentage or claim mail delivery from a button click.
 
 Profile forms expose one receiving-mailbox address; IMAP login uses that address.

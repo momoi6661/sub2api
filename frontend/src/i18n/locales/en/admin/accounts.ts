@@ -587,9 +587,9 @@ export default {
         empty: 'No authorization tasks', emptyHint: 'Use one-click authorization in the account list or when adding an account.',
         noMatches: 'No matching tasks', noMatchesHint: 'Adjust your search or clear the status filter.',
         submitted: 'Task submitted. View progress and results under Authorization tasks in the sidebar.',
-        queueHint: 'Queued for sequential execution. Navigation does not cancel this task.', newAccount: 'New account', retry: 'Submit authorization again',
+        queueHint: 'Queued for sequential execution. Navigation does not cancel this task.', newAccount: 'New account', retry: 'Submit authorization again', cancel: 'Cancel task', delete: 'Delete record',
         loadFailed: 'Could not load task history. Refresh to retry.', errorHint: 'Check the authorization profile and proxy, or authorize manually.',
-        statuses: { queued: 'Queued', running: 'Running', succeeded: 'Authorized', ready: 'Credentials obtained', failed: 'Failed' },
+        statuses: { queued: 'Queued', running: 'Running', succeeded: 'Authorized', ready: 'Credentials obtained', failed: 'Failed', cancelled: 'Cancelled' },
         sources: { manual: 'Manual', batch: 'Batch', automatic: 'Automatic recovery', new_account: 'New account' },
         errors: {
           MAILBOX_CONNECTION_FAILED: 'Mailbox login or reading failed. Check the host, folder and password; Gmail requires an app password. Code delivery has not started if this initial step fails.',

@@ -59,7 +59,9 @@
         <p v-if="detailError" role="alert" class="text-sm text-red-600">{{ detailError }}</p>
       </div>
       <template #footer>
-        <button v-if="selected?.status === 'failed' && selected.account_id" class="btn btn-primary" :disabled="retrying" @click="retry">{{ t(`${key}.retry`) }}</button>
+        <button v-if="selected && (selected.status === 'queued' || selected.status === 'running')" class="btn btn-danger" :disabled="stopping" @click="stop">{{ t(`${key}.cancel`) }}</button>
+        <button v-if="selected?.status === 'failed' && selected.account_id" class="btn btn-primary" :disabled="retrying || stopping" @click="retry">{{ t(`${key}.retry`) }}</button>
+        <button v-if="selected && !['queued', 'running'].includes(selected.status)" class="btn btn-ghost text-red-600" :disabled="stopping" @click="remove">{{ t(`${key}.delete`) }}</button>
         <button class="btn btn-secondary" @click="close">{{ t('common.close') }}</button>
       </template>
     </BaseDialog>
@@ -79,14 +81,14 @@ import SearchInput from '@/components/common/SearchInput.vue'
 import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import OneClickAuthProgress from '@/components/account/OneClickAuthProgress.vue'
-import { listAuthorizationTasks, getAuthorizationTask, submitAuthorizationTasks, type AuthorizationTask } from '@/api/admin/reauthProfiles'
+import { listAuthorizationTasks, getAuthorizationTask, submitAuthorizationTasks, cancelAuthorizationTask, deleteAuthorizationTask, type AuthorizationTask } from '@/api/admin/reauthProfiles'
 import { extractApiErrorMessage } from '@/utils/apiError'
 
 const key = 'admin.accounts.authorizationTasks'
 const { t, te } = useI18n()
 const route = useRoute(), router = useRouter()
 const tasks = ref<AuthorizationTask[]>([]), selected = ref<AuthorizationTask | null>(null)
-const total = ref(0), activeCount = ref(0), loading = ref(false), retrying = ref(false)
+const total = ref(0), activeCount = ref(0), loading = ref(false), retrying = ref(false), stopping = ref(false)
 const error = ref(''), detailError = ref(''), now = ref(Date.now())
 let refreshTimer: ReturnType<typeof setTimeout> | undefined, searchTimer: ReturnType<typeof setTimeout> | undefined
 let request: AbortController | undefined, disposed = false
@@ -94,12 +96,12 @@ const query = (name: string) => typeof route.query[name] === 'string' ? route.qu
 const search = computed({ get: () => query('q'), set: value => { void router.replace({ query: { ...route.query, q: value || undefined, page: undefined } }) } })
 const status = computed({ get: () => query('status'), set: value => { void router.replace({ query: { ...route.query, status: value || undefined, page: undefined } }) } })
 const page = computed(() => Math.max(1, Math.min(1000000, Number(query('page')) || 1)))
-const statusOptions = computed(() => [{ value: '', label: t('admin.accounts.authProfiles.allStatuses') }, ...['queued', 'running', 'succeeded', 'ready', 'failed'].map(value => ({ value, label: t(`${key}.statuses.${value}`) }))])
+const statusOptions = computed(() => [{ value: '', label: t('admin.accounts.authProfiles.allStatuses') }, ...['queued', 'running', 'succeeded', 'ready', 'failed', 'cancelled'].map(value => ({ value, label: t(`${key}.statuses.${value}`) }))])
 const columns = computed(() => [
   { key: 'account_name', label: t(`${key}.account`) }, { key: 'profile_name', label: t('admin.accounts.oneClickAuth.profile') },
   { key: 'status', label: t('common.status') }, { key: 'created_at', label: t(`${key}.createdAt`) }, { key: 'actions', label: t('common.actions') }
 ])
-function badge(value: string) { return value === 'succeeded' || value === 'ready' ? 'badge-success' : value === 'failed' ? 'badge-danger' : value === 'running' ? 'badge-info' : 'badge-gray' }
+function badge(value: string) { return value === 'succeeded' || value === 'ready' ? 'badge-success' : value === 'failed' ? 'badge-danger' : value === 'cancelled' ? 'badge-warning' : value === 'running' ? 'badge-info' : 'badge-gray' }
 function date(value: string) { return new Date(value).toLocaleString() }
 function duration(task: AuthorizationTask) { return Math.max(0, Math.floor(((task.finished_at ? Date.parse(task.finished_at) : now.value) - Date.parse(task.started_at || task.created_at)) / 1000)) }
 function errorHint(code: string) { return `${code} · ${te(`${key}.errors.${code}`) ? t(`${key}.errors.${code}`) : t(`${key}.errorHint`)}` }
@@ -134,6 +136,20 @@ async function retry() {
   try { const [task] = await submitAuthorizationTasks([selected.value.account_id]); open(task); await load() }
   catch (e) { detailError.value = extractApiErrorMessage(e, t(`${key}.loadFailed`)) }
   finally { retrying.value = false }
+}
+async function stop() {
+  if (!selected.value || stopping.value) return
+  stopping.value = true; detailError.value = ''
+  try { selected.value = await cancelAuthorizationTask(selected.value.id); await load() }
+  catch (e) { detailError.value = extractApiErrorMessage(e, t(`${key}.loadFailed`)) }
+  finally { stopping.value = false }
+}
+async function remove() {
+  if (!selected.value || stopping.value) return
+  stopping.value = true; detailError.value = ''
+  try { await deleteAuthorizationTask(selected.value.id); close(); await load() }
+  catch (e) { detailError.value = extractApiErrorMessage(e, t(`${key}.loadFailed`)) }
+  finally { stopping.value = false }
 }
 function visibility() { if (document.hidden) { clearTimeout(refreshTimer); request?.abort() } else void load() }
 watch(() => [route.query.q, route.query.status, route.query.page], () => { clearTimeout(refreshTimer); clearTimeout(searchTimer); request?.abort(); searchTimer = setTimeout(() => { void load() }, 250) })

@@ -83,7 +83,7 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
         const alert = page.getByRole('alert').first()
         if (await alert.isVisible() && /invalid|incorrect|expired|could not|try again|无效|错误|已过期/i.test(await alert.innerText())) return failure('AUTH_REJECTED', 'Login rejected the verification code or authorization request')
         // Hidden duplicate inputs/buttons are common on the login landing page.
-        const email = page.locator('input[type="email"]:visible, input[name="email"]:visible, input[name="username"]:visible, input[autocomplete="username"]:visible').first()
+        const email = page.locator('input[type="email"]:visible, input[name="email"]:visible, input[id*="email" i]:visible, input[autocomplete="email"]:visible, input[name="username"]:visible, input[autocomplete="username"]:visible').first()
         const otp = page.locator('input[autocomplete="one-time-code"]:visible, input[name="code"]:visible, input[name="otp"]:visible, input[name="otp_code"]:visible, input[name="one-time-code"]:visible').first()
         const visibleControl = async (scope, roles, name) => {
           for (const role of roles) {
@@ -120,7 +120,7 @@ export async function authorizeWithBrowser(task, chromium, signal, report = () =
         } else {
           const codeLabel = /send.*code|use.*code|email.*code|log\s?in with.*code|sign\s?in with.*code|one.time code|发送.*验证码|使用.*验证码|通过.*验证码/i
           const sendCode = await visibleControl(page, ['button', 'link'], codeLabel)
-          const login = !submittedEmail && !openedLogin ? await visibleControl(page, ['button', 'link'], /^(log\s?in|sign\s?in|登录)(\s|$)/i) : null
+          const login = !submittedEmail && !openedLogin ? await visibleControl(page, ['button', 'link'], /^(log\s?in|sign\s?in|continue\s+with\s+(email|email\s+address)|use\s+email|email\s+login|登录|使用邮箱)(\s|$)/i) : null
           const consent = submittedCode && !consentSubmitted ? await visibleControl(page, ['button'], /^(continue|allow|authorize|继续|允许|授权)(\s|$)/i) : null
           if (login) { phase = 'LOGIN_ENTRY_FAILED'; report('email_login'); await login.click(); openedLogin = true; lastActionAt = Date.now() }
           else if (!requestedCode && submittedEmail && sendCode) { phase = 'CODE_REQUEST_FAILED'; report('requesting_code'); await sendCode.click(); requestedCode = true; lastActionAt = Date.now() }

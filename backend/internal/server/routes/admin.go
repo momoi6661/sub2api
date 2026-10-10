@@ -572,6 +572,8 @@ func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 	tasks.GET("", h.Admin.Account.ListAuthorizationTasks)
 	tasks.POST("", h.Admin.Account.SubmitAuthorizationTasks)
 	tasks.GET("/:id", h.Admin.Account.GetAuthorizationTask)
+	tasks.POST("/:id/cancel", h.Admin.Account.CancelAuthorizationTask)
+	tasks.DELETE("/:id", h.Admin.Account.DeleteAuthorizationTask)
 	profiles := admin.Group("/reauth-profiles")
 	profiles.GET("", h.Admin.Setting.ListReauthProfiles)
 	profiles.POST("", h.Admin.Setting.SaveReauthProfile)

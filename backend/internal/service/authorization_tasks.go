@@ -40,6 +40,8 @@ type AuthorizationTaskRepository interface {
 	Claim(context.Context) (*AuthorizationTask, error)
 	Report(context.Context, int64, string) error
 	Finish(context.Context, int64, string, string, string) error
+	Cancel(context.Context, int64) error
+	Delete(context.Context, int64) error
 	List(context.Context, string, string, int, int) (*AuthorizationTaskPage, error)
 	Get(context.Context, int64) (*AuthorizationTask, error)
 }

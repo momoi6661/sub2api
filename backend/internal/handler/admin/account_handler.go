@@ -53,6 +53,7 @@ type AccountHandler struct {
 	authTaskWake            chan struct{}
 	authTaskCancel          context.CancelFunc
 	authTaskWG              sync.WaitGroup
+	authTaskControllers     sync.Map // task ID -> context.CancelFunc
 	reauthSettings          *service.SettingService
 	reauthWorker            *service.OneClickAuthWorker
 	reauthLocks             service.LeaderLockCache

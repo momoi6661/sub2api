@@ -146,7 +146,9 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 		return
 	}
 	ctx, cancel := context.WithTimeout(startAuthProgress(c), 135*time.Second)
+	ctx, taskCancel := context.WithCancel(ctx)
 	defer cancel()
+	defer taskCancel()
 	draft := &service.Account{Platform: service.PlatformOpenAI, Type: "oauth", ProxyID: input.ProxyID, Extra: map[string]any{
 		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail,
 	}}
@@ -155,6 +157,8 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 		finishAuthRequest(c, nil, err)
 		return
 	}
+	h.authTaskControllers.Store(record.ID, taskCancel)
+	defer h.authTaskControllers.Delete(record.ID)
 	ctx = h.recordedProgress(ctx, record.ID)
 	c.Set("auth_task_finish", func(err error) {
 		if ctx.Err() != nil {

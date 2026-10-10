@@ -101,6 +101,14 @@ func (r *authorizationTaskRepository) Finish(ctx context.Context, id int64, stat
 	_, err := r.db.ExecContext(ctx, `UPDATE authorization_tasks SET status=$2,error_code=$3,error_message=$4,finished_at=NOW() WHERE id=$1 AND status='running'`, id, status, code, message)
 	return err
 }
+func (r *authorizationTaskRepository) Cancel(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE authorization_tasks SET status='cancelled',error_code='TASK_CANCELLED',error_message='Authorization task cancelled by operator.',finished_at=NOW() WHERE id=$1 AND status IN ('queued','running')`, id)
+	return err
+}
+func (r *authorizationTaskRepository) Delete(ctx context.Context, id int64) error {
+	_, err := r.db.ExecContext(ctx, `DELETE FROM authorization_tasks WHERE id=$1`, id)
+	return err
+}
 func (r *authorizationTaskRepository) Get(ctx context.Context, id int64) (*service.AuthorizationTask, error) {
 	if _, err := r.db.ExecContext(ctx, expireAuthTasks); err != nil {
 		return nil, err

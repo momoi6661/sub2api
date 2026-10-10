@@ -17,7 +17,10 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// One bounded worker drains persisted tasks only when woken. No idle polling.
+const authorizationTaskConcurrency = 2
+
+// A bounded worker drains persisted tasks only when woken. Each claimed task
+// owns its context and OAuth session; unrelated accounts may run in parallel.
 func (h *AccountHandler) SetAuthorizationTasks(repo service.AuthorizationTaskRepository) {
 	h.authTaskRepo = repo
 	ctx, cancel := context.WithCancel(context.Background())
@@ -26,22 +29,39 @@ func (h *AccountHandler) SetAuthorizationTasks(repo service.AuthorizationTaskRep
 	h.authTaskWG.Add(1)
 	go func() {
 		defer h.authTaskWG.Done()
+		semaphore := make(chan struct{}, authorizationTaskConcurrency)
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			case <-h.authTaskWake:
 			}
+		drain:
 			for ctx.Err() == nil {
+				select {
+				case semaphore <- struct{}{}:
+				default:
+					break drain
+				}
 				task, err := repo.Claim(ctx)
 				if err != nil {
+					<-semaphore
 					slog.Error("authorization task queue unavailable")
 					break
 				}
 				if task == nil {
+					<-semaphore
 					break
 				}
-				h.executeQueuedAuthorization(ctx, task)
+				h.authTaskWG.Add(1)
+				go func(task *service.AuthorizationTask) {
+					defer h.authTaskWG.Done()
+					defer func() {
+						<-semaphore
+						h.wakeAuthorizationTasks()
+					}()
+					h.executeQueuedAuthorization(ctx, task)
+				}(task)
 			}
 		}
 	}()
@@ -116,6 +136,8 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 }
 
 func (h *AccountHandler) authorizeRecorded(ctx context.Context, id int64, source string) (*service.Account, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	account, err := h.adminService.GetAccount(ctx, id)
 	if err != nil {
 		return nil, err
@@ -124,6 +146,8 @@ func (h *AccountHandler) authorizeRecorded(ctx context.Context, id int64, source
 	if err = h.authTaskRepo.Create(ctx, []*service.AuthorizationTask{task}); err != nil {
 		return nil, err
 	}
+	h.authTaskControllers.Store(task.ID, cancel)
+	defer h.authTaskControllers.Delete(task.ID)
 	result, err := h.authorizeOneClick(h.recordedProgress(ctx, task.ID), id)
 	if ctx.Err() != nil {
 		err = ctx.Err()
@@ -134,6 +158,8 @@ func (h *AccountHandler) authorizeRecorded(ctx context.Context, id int64, source
 
 func (h *AccountHandler) executeQueuedAuthorization(parent context.Context, task *service.AuthorizationTask) {
 	ctx, cancel := context.WithTimeout(parent, 135*time.Second)
+	h.authTaskControllers.Store(task.ID, cancel)
+	defer h.authTaskControllers.Delete(task.ID)
 	defer cancel()
 	var resultErr error
 	defer func() {
@@ -249,7 +275,7 @@ func (h *AccountHandler) ListAuthorizationTasks(c *gin.Context) {
 	}
 	status := c.Query("status")
 	switch status {
-	case "", "active", "queued", "running", "succeeded", "ready", "failed":
+	case "", "active", "queued", "running", "succeeded", "ready", "failed", "cancelled":
 	default:
 		response.BadRequest(c, "Invalid task status")
 		return
@@ -284,4 +310,49 @@ func (h *AccountHandler) GetAuthorizationTask(c *gin.Context) {
 		return
 	}
 	response.Success(c, task)
+}
+
+func (h *AccountHandler) CancelAuthorizationTask(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id < 1 {
+		response.BadRequest(c, "Invalid task ID")
+		return
+	}
+	if cancel, ok := h.authTaskControllers.Load(id); ok {
+		cancel.(context.CancelFunc)()
+	}
+	if err := h.authTaskRepo.Cancel(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	task, err := h.authTaskRepo.Get(c.Request.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		response.NotFound(c, "Task not found")
+		return
+	}
+	if err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, task)
+}
+
+func (h *AccountHandler) DeleteAuthorizationTask(c *gin.Context) {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil || id < 1 {
+		response.BadRequest(c, "Invalid task ID")
+		return
+	}
+	if cancel, ok := h.authTaskControllers.Load(id); ok {
+		cancel.(context.CancelFunc)()
+	}
+	if err := h.authTaskRepo.Cancel(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	if err := h.authTaskRepo.Delete(c.Request.Context(), id); err != nil {
+		response.ErrorFrom(c, err)
+		return
+	}
+	response.Success(c, gin.H{"id": id})
 }

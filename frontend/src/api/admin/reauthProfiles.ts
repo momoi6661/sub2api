@@ -108,7 +108,7 @@ export async function runOneClickAuth(accountID: number, onProgress?: ProgressCa
 export interface AuthorizationTask {
   id: number; account_id: number; account_name: string; login_email: string
   profile_id: string; profile_name: string; source: 'manual' | 'batch' | 'automatic' | 'new_account'
-  status: 'queued' | 'running' | 'succeeded' | 'ready' | 'failed'; stage: AuthorizationStage
+  status: 'queued' | 'running' | 'succeeded' | 'ready' | 'failed' | 'cancelled'; stage: AuthorizationStage
   created_at: string; started_at: string | null; finished_at: string | null
   events: { stage: AuthorizationStage; at: string }[]; error_code: string; error_message: string
 }
@@ -124,6 +124,13 @@ export async function listAuthorizationTasks(params: { q?: string; status?: stri
 export async function getAuthorizationTask(id: number, signal?: AbortSignal): Promise<AuthorizationTask> {
   const { data } = await apiClient.get<AuthorizationTask>(`/admin/authorization-tasks/${id}`, { signal })
   return data
+}
+export async function cancelAuthorizationTask(id: number): Promise<AuthorizationTask> {
+  const { data } = await apiClient.post<AuthorizationTask>(`/admin/authorization-tasks/${id}/cancel`)
+  return data
+}
+export async function deleteAuthorizationTask(id: number): Promise<void> {
+  await apiClient.delete(`/admin/authorization-tasks/${id}`)
 }
 
 export interface NewAccountAuthorization {

@@ -386,9 +386,9 @@ export default {
         empty: '暂无授权任务', emptyHint: '在账号列表点击一键授权，或在添加账号时使用一键授权。',
         noMatches: '没有匹配的任务', noMatchesHint: '调整搜索内容或清除状态筛选后重试。',
         submitted: '任务已提交，进度和结果可在侧边栏「授权任务」查看。',
-        queueHint: '已进入队列，按顺序执行；切换页面不会取消任务。', newAccount: '待添加账号', retry: '重新提交授权',
+        queueHint: '已进入队列，按顺序执行；切换页面不会取消任务。', newAccount: '待添加账号', retry: '重新提交授权', cancel: '中断任务', delete: '删除记录',
         loadFailed: '任务记录读取失败，请点击刷新重试。', errorHint: '请检查授权配置和代理，或人工授权后重试。',
-        statuses: { queued: '排队中', running: '执行中', succeeded: '授权成功', ready: '凭据已获取', failed: '执行失败' },
+        statuses: { queued: '排队中', running: '执行中', succeeded: '授权成功', ready: '凭据已获取', failed: '执行失败', cancelled: '已中断' },
         sources: { manual: '手动授权', batch: '批量授权', automatic: '失效自动授权', new_account: '新增账号授权' },
         errors: {
           MAILBOX_CONNECTION_FAILED: '无法登录或读取收件邮箱。检查主机、文件夹和邮箱密码；Gmail 请使用应用专用密码。此步骤失败时尚未进入发送验证码流程。',

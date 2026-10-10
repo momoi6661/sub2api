@@ -8,12 +8,18 @@ const deliveryStart = task => Math.floor(Date.parse(task.context.since) / 1000) 
 
 // Match actual delivery headers as well as To/Cc, including forwarded aliases.
 export function matchMailboxMessage(parsed, internalDate, task) {
-  const recipient = task.context.loginEmail.toLowerCase()
+  // iCloud Hide My Email can forward a message to Gmail while rewriting the
+  // visible recipient headers. Accept either the login alias or the mailbox
+  // that actually receives the forwarded message.
+  const recipients = new Set([
+    task.context.loginEmail,
+    task.context.mailboxAddress,
+  ].filter(value => typeof value === 'string' && value.trim()).map(value => value.trim().toLowerCase()))
   const delivered = ['delivered-to', 'x-original-to', 'envelope-to'].flatMap(key => {
     const raw = parsed.headers.get(key)
     return typeof raw === 'string' ? raw.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+/gi) || [] : addresses(raw)
   }).map(value => value.toLowerCase())
-  if (![...addresses(parsed.to), ...addresses(parsed.cc), ...delivered].includes(recipient)) return null
+  if (![...addresses(parsed.to), ...addresses(parsed.cc), ...delivered].some(value => recipients.has(value))) return null
   if (!(internalDate instanceof Date) || !Number.isFinite(internalDate.getTime()) || !Number.isFinite(deliveryStart(task)) || internalDate.getTime() < deliveryStart(task)) return null
   if (task.mailbox.senderFilter && !addresses(parsed.from).includes(task.mailbox.senderFilter.toLowerCase())) return null
   const body = `${parsed.subject || ''}\n${parsed.text || ''}`.slice(0, 100000)
@@ -34,7 +40,9 @@ export async function executeMailbox(task) {
     await client.mailboxOpen(config.folder || 'INBOX', { readOnly: true })
     if (task.operation === 'mailbox_snapshot') return { type: 'mailbox_snapshot', uidNext: client.mailbox.uidNext, uidValidity: String(client.mailbox.uidValidity) }
     if (String(client.mailbox.uidValidity) !== config.uidValidity) return error('MAILBOX_CHANGED', 'Mailbox was reset during this authorization task')
-    const deadline = Date.now() + 25000
+    const configuredSeconds = Number.parseInt(process.env.MAILBOX_WAIT_SECONDS || '60', 10)
+    const waitSeconds = Number.isFinite(configuredSeconds) ? Math.min(180, Math.max(30, configuredSeconds)) : 60
+    const deadline = Date.now() + waitSeconds * 1000
     while (Date.now() < deadline) {
       const uids = await client.search({ uid: `${config.minUID}:*`, since: new Date(task.context.since) }, { uid: true })
       const fresh = (uids || []).filter(uid => uid >= config.minUID).slice(-50).reverse()

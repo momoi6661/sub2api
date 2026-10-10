@@ -9,6 +9,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY *.mjs *.py ./
 ENV BIND_HOST=0.0.0.0
+ENV MAILBOX_WAIT_SECONDS=60
 USER node
 EXPOSE 8189
 CMD ["node", "server.mjs"]

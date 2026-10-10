@@ -21,6 +21,12 @@ test('parsed delivery headers support forwarded login addresses', async () => {
   assert.equal(matchMailboxMessage(parsed, new Date('2026-10-10T12:00:01Z'), task), '123456')
 })
 
+test('iCloud forwarding may expose the receiving Gmail address', async () => {
+  const parsed = await simpleParser(email({ to: 'gmail-inbox@example.com' }))
+  const forwardedTask = { ...task, context: { ...task.context, mailboxAddress: 'gmail-inbox@example.com' } }
+  assert.equal(matchMailboxMessage(parsed, new Date('2026-10-10T12:00:01Z'), forwardedTask), '123456')
+})
+
 test('another recipient or sender never yields a code', async () => {
   for (const options of [{ to: 'other@example.com' }, { from: 'other@example.com' }]) {
     assert.equal(matchMailboxMessage(await simpleParser(email(options)), new Date('2026-10-10T12:00:01Z'), task), null)

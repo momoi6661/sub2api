@@ -32,16 +32,24 @@ function provider(options = {}) {
     }
     if (url.pathname === '/log-in') return new Response('<html><script src="/sentinel.js"></script>Log in</html>', { headers: { 'set-cookie': 'login_session=fresh; Secure; HttpOnly; Path=/' } })
     assert.match(init.headers.Cookie || '', /login_session=fresh/)
+    if (init.method === 'POST' && url.pathname.startsWith('/api/')) assert.equal(init.headers.Origin, origin)
     if (url.pathname === '/api/accounts/authorize/continue') {
       assert.deepEqual(JSON.parse(init.body).username, { value: 'owner@example.com', kind: 'email' })
       if (options.signup) return json({ continue_url: '/about-you' })
       if (options.pageType) return json({ page: { type: options.pageType } })
       if (options.sentinel) return json({ error: { code: 'sentinel_required' } })
+      if (options.passwordRedirect) return json({ continue_url: '/login-route' })
       if (options.password) return json({ continue_url: '/log-in/password', page: { type: 'password' } })
       sentCode = true
       return json({ continue_url: '/email-verification' })
     }
+    if (url.pathname === '/login-route') return redirect('/log-in/password')
+    if (url.pathname === '/log-in/password') return new Response('<html>Password or email code</html>', { headers: { 'set-cookie': 'oai-did=test-device; Secure; Path=/' } })
     if (url.pathname === '/api/accounts/passwordless/send-otp') {
+      assert.equal(init.headers['oai-device-id'], 'test-device')
+      assert.equal(init.headers.Referer, origin + '/log-in/password')
+      if (options.sendRejected) return new Response('private credentials', { status: 403 })
+      if (options.codeUnavailable) return json({ continue_url: '/log-in/password' })
       sentCode = true
       if (options.emptySendResponse) return new Response(null)
       return json({ page: { type: 'email_otp_verification' } })
@@ -121,6 +129,25 @@ test('successful empty OTP send response continues to email verification', async
   assert.equal(mock.reads.length, 1)
 })
 
+test('redirected password page switches to email code using its session cookies', async () => {
+  const mock = provider({ passwordRedirect: true })
+  assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
+  assert.equal(mock.requests.filter(r => r.url.pathname === '/api/accounts/passwordless/send-otp').length, 1)
+  assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/password/verify'), false)
+  assert.equal(mock.reads.length, 1)
+})
+
+test('email-code refusal stops before reading mail or submitting a password', async () => {
+  for (const options of [{ sendRejected: true }, { codeUnavailable: true }]) {
+    const mock = provider({ password: true, ...options })
+    const result = await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)
+    assert.equal(result.error.code, options.sendRejected ? 'CODE_REQUEST_FAILED' : 'EMAIL_CODE_UNAVAILABLE')
+    if (options.sendRejected) assert.equal(result.error.httpStatus, 403)
+    assert.equal(mock.reads.length, 0)
+    assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/password/verify'), false)
+  }
+})
+
 for (const options of [{ signup: true }, { signupAfterCode: true }, { pageType: 'create_account' }]) {
   test(`never registers accounts: ${JSON.stringify(options)}`, async () => {
     const mock = provider(options)
@@ -135,7 +162,8 @@ for (const options of [{ challenge: true }, { sentinel: true }, { pageType: 'pho
   test(`manual verification stops without reading codes: ${JSON.stringify(options)}`, async () => {
     const mock = provider(options)
     const result = await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)
-    assert.equal(result.error.code, 'MANUAL_REQUIRED')
+    assert.equal(result.error.code, options.pageType ? 'MANUAL_REQUIRED' : 'PROVIDER_SECURITY_CHALLENGE')
+    if (options.challenge) assert.equal(result.error.httpStatus, 403)
     assert.equal(mock.reads.length, 0)
   })
 }

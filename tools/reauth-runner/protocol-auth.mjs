@@ -16,7 +16,10 @@ function checkStep(url, pageType = '') {
   if (/about-you|sign-up|signup|register|create_account/.test(url.pathname + ' ' + pageType)) {
     reject('ACCOUNT_NOT_REGISTERED', 'The provider requires account registration or profile setup; this task only authorizes existing accounts')
   }
-  if (/add-phone|phone[_/-]|select-channel|mfa|totp|passkey|captcha|challenge|sentinel/.test(url.pathname + ' ' + pageType)) {
+  if (/captcha|challenge|sentinel/.test(url.pathname + ' ' + pageType)) {
+    reject('PROVIDER_SECURITY_CHALLENGE', 'The authorization provider requires a security challenge')
+  }
+  if (/add-phone|phone[_/-]|select-channel|mfa|totp|passkey/.test(url.pathname + ' ' + pageType)) {
     reject('MANUAL_REQUIRED', 'The provider requires additional verification; authorize this account manually')
   }
 }
@@ -64,21 +67,30 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       if (url.origin !== origin || url.username || url.password) reject('OAUTH_REDIRECT_INVALID', 'Authorization redirected outside the supported provider')
       checkStep(url)
       const cookies = await jar.getCookieString(url.href)
+      const deviceID = (await jar.getCookies(url.href)).find(cookie => cookie.key === 'oai-did')?.value
       const response = await fetch(url.href, {
         ...options, redirect: 'manual', size: 1024 * 1024,
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
-        headers: { Accept: 'application/json', 'Accept-Language': 'en-US,en;q=0.9',
+        headers: { Accept: options.method === 'POST' ? 'application/json' : 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9',
+          ...(options.method === 'POST' && deviceID ? { 'oai-device-id': deviceID } : {}),
           ...(cookies ? { Cookie: cookies } : {}), ...options.headers }
       })
       for (const cookie of response.headers.raw()['set-cookie'] || []) await jar.setCookie(cookie, url.href)
       const text = await response.text()
-      if (/just a moment|checking your browser|verify you are human|challenges\.cloudflare\.com/i.test(text)) {
-        reject('MANUAL_REQUIRED', 'Authorization requires a provider security challenge; authorize manually')
+      if (response.headers.get('cf-mitigated') === 'challenge' || /just a moment|checking your browser|verify you are human|challenges\.cloudflare\.com/i.test(text)) {
+        const result = failure('PROVIDER_SECURITY_CHALLENGE', 'The authorization provider returned a security challenge; email-code login has not completed')
+        result.error.httpStatus = response.status
+        throw Object.assign(new Error(result.error.message), { result })
       }
       let data = {}
       try { data = JSON.parse(text) } catch { /* Login landing pages are HTML. */ }
       if (!data || typeof data !== 'object' || Array.isArray(data)) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider returned an invalid authorization response')
-      if (/captcha|challenge|sentinel|mfa_required|phone_verification/i.test(String(data.error?.code || ''))) {
+      if (/captcha|challenge|sentinel/i.test(String(data.error?.code || ''))) {
+        const result = failure('PROVIDER_SECURITY_CHALLENGE', 'The authorization provider requires a security challenge')
+        result.error.httpStatus = response.status
+        throw Object.assign(new Error(result.error.message), { result })
+      }
+      if (/mfa_required|phone_verification/i.test(String(data.error?.code || ''))) {
         reject('MANUAL_REQUIRED', 'Authorization requires a provider security challenge; authorize manually')
       }
       const pageType = typeof data.page?.type === 'string' ? data.page.type : ''
@@ -109,7 +121,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       reject('OAUTH_REDIRECT_INVALID', 'Authorization exceeded the redirect limit')
     }
     const post = async (path, data, referer) => request(path, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Referer: referer.href }, body: JSON.stringify(data)
+      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin, Referer: referer.href }, body: JSON.stringify(data)
     })
 
     report('protocol_start')
@@ -123,15 +135,19 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       checkStep(new URL(target, origin), step.data.page?.type || '')
       phase = 'CODE_REQUEST_FAILED'
       report('requesting_code')
-      // Existing password accounts may offer email-code login instead.
-      if (/password/.test(new URL(target, origin).pathname) || /password/.test(step.data.page?.type || '')) {
-        step = await post('/api/accounts/passwordless/send-otp', {}, new URL(target, origin))
+      // Open the returned step first so redirect destinations and cookies apply.
+      step = await follow(target)
+      // Existing password accounts may offer email-code login instead. The
+      // destination can be a password page even when the API returned /log-in.
+      if (!step.code && /password/.test(step.url.pathname)) {
+        step = await post('/api/accounts/passwordless/send-otp', {}, step.url)
         target = nextURL(step.data)
         // Like the reference, accept a successful send with no response payload.
         if (!target && Object.keys(step.data).length === 0) target = '/email-verification'
         if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not confirm email-code login')
+        step = await follow(target)
+        if (!step.code && /password/.test(step.url.pathname)) reject('EMAIL_CODE_UNAVAILABLE', 'The provider did not offer email-code login for this account')
       }
-      step = await follow(target)
       if (!step.code && step.url.pathname === '/email-verification') {
         report('waiting_code')
         const result = await executeScript({ ...task, resultType: 'code' }, { signal })

@@ -106,7 +106,7 @@ function date(value: string) { return new Date(value).toLocaleString() }
 function duration(task: AuthorizationTask) { return Math.max(0, Math.floor(((task.finished_at ? Date.parse(task.finished_at) : now.value) - Date.parse(task.started_at || task.created_at)) / 1000)) }
 function errorHint(task: AuthorizationTask) {
   const code = task.error_code
-  const status = ['AUTH_PAGE_HTTP_ERROR', 'MANUAL_REQUIRED'].includes(code) ? /^Authorization page returned HTTP ([45]\d{2})$/.exec(task.error_message || '')?.[1] : undefined
+  const status = /^Authorization page returned HTTP ([45]\d{2})$/.exec(task.error_message || '')?.[1]
   return `${code}${status ? ` (HTTP ${status})` : ''} · ${te(`${key}.errors.${code}`) ? t(`${key}.errors.${code}`) : t(`${key}.errorHint`)}`
 }
 function setPage(value: number) { void router.replace({ query: { ...route.query, page: value > 1 ? String(value) : undefined } }) }

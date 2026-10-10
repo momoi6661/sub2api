@@ -120,7 +120,7 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 		var execution *service.ReauthExecutionError
 		if errors.As(err, &execution) && safeAuthErrorCode.MatchString(execution.Code) {
 			code = execution.Code
-			if (code == "AUTH_PAGE_HTTP_ERROR" || code == "MANUAL_REQUIRED") && execution.HTTPStatus >= 400 && execution.HTTPStatus <= 599 {
+			if execution.HTTPStatus >= 400 && execution.HTTPStatus <= 599 {
 				message = fmt.Sprintf("Authorization page returned HTTP %d", execution.HTTPStatus)
 			}
 			if code == "TASK_CANCELLED" {

@@ -7,18 +7,23 @@ exchange. The runner returns one Codex authorization JSON file. Custom `auth_fil
 scripts continue to return files directly without starting a login session.
 
 Only existing accounts are authorized. `/about-you`, signup and profile creation
-return `ACCOUNT_NOT_REGISTERED` without submitting registration data. CAPTCHA,
-Sentinel/security challenges, phone verification, passkeys, MFA and ambiguous
-workspace selection return `MANUAL_REQUIRED`. Password pages use the provider's
-email-code login route; unsupported steps terminate the task. No challenge solving,
+return `ACCOUNT_NOT_REGISTERED` without submitting registration data. CAPTCHA and
+Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`, preserving the
+HTTP status when available. Phone verification, passkeys, MFA and ambiguous
+workspace selection return `MANUAL_REQUIRED`. Password pages (including redirected
+pages) use `/api/accounts/passwordless/send-otp`, then mailbox code reading and
+`/api/accounts/email-otp/validate`. A return to the password page after sending
+returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted. No challenge solving,
 fingerprint impersonation or automatic retries are included.
 
 The readable protocol reference is `Wenfxl-Codex-Manager-v18.2.0`:
 `utils/auth_pipeline/register.py::run_oauth_only`, `oauth.py`, and
 `utils/email_providers/mail_service.py::get_oai_code`. Its mailbox readers use
 IMAP or HTTP APIs, not Playwright. Its `auth_core` is a compiled extension;
-`init_auth`/`generate_payload` are not ported or required by this client. Provider
-security requirements may therefore prevent this protocol client from logging in.
+`init_auth`/`generate_payload` are not included in this client. This is not a complete
+port of the reference's HTTP transport and compiled module. Provider security
+requirements may prevent this client from reaching even the initial login step;
+email-code support does not resolve an authorization-entry security challenge.
 
 Run this optional service separately from Sub2API. Set `REAUTH_RUNNER_TOKEN` to a
 random value of at least 32 characters. Configure Sub2API with

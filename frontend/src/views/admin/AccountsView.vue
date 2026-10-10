@@ -1747,9 +1747,7 @@ function accountDisplayEmail(row: any): string {
 }
 
 function canOneClickAuthorize(row: Account): boolean {
-  if (row.platform !== 'openai' || row.type !== 'oauth' || row.status !== 'error') return false
-  const extra = row.extra as Record<string, unknown> | undefined
-  return extra?.one_click_auth_enabled === true && typeof extra?.one_click_auth_profile === 'string' && extra.one_click_auth_profile.trim() !== ''
+  return row.platform === 'openai' && row.type === 'oauth' && row.parent_account_id == null
 }
 
 function accountHomepageUrl(row: Account): string {

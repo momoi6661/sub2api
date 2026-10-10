@@ -45,10 +45,39 @@ automatic recovery off. Canceling aborts the draft request; failed creation reta
 credentials for retry while the dialog is open. Draft scripts receive accountId 0.
 Refreshing the profile list hides any revealed passwords.
 
-One-click actions immediately show a spinner and an authorization task panel.
-Stages arrive on the running request as newline-delimited JSON; no polling or
-persistent background task is added. Show actual profile, connection, execution,
-verification and save stages with elapsed seconds, never an invented percentage.
-Keep completed tasks and structured errors visible until dismissed. Batch progress
-counts processed accounts, including failures and unsupported accounts. Creation
-uses the same stage display and retains credentials if account creation fails.
+The sidebar Authorization tasks page owns all task history. Reuse TablePageLayout,
+DataTable, SearchInput, Select, Pagination and BaseDialog, with compact status badges
+and existing brand colors. Keep the information density moderate and animation
+limited to meaningful busy indicators. First glance answers which account is being
+authorized, its status and last real stage. Search/status/page/detail selection live
+in the URL. Details show a timestamped stage history, elapsed time and safe error
+codes with actionable hints. Existing-account failures can be manually resubmitted.
+
+Manual and batch account actions submit persisted queue entries in one request.
+A single worker drains the queue without idle polling; navigation does not cancel
+execution. Queued entries survive server restarts; interrupted running tasks become
+failed after a bounded deadline rather than retrying automatically. Profile/email
+bindings are checked again before execution. Automatic recovery and draft creation
+also write history; draft history records credentials obtained, not account created.
+No scripts, mailbox passwords or OAuth credentials enter the task-history table.
+Draft creation remains cancellable and preserves its result only in the open dialog.
+
+Account management has only shortcuts and busy states, not a task panel. Active
+history updates every four seconds while the page is visible; hidden/unmounted or
+idle pages do not poll. Runner events distinguish mailbox connection, browser start,
+email submission, code request, code reading/submission, consent, verification and
+saving. Never show an invented percentage or claim mail delivery from a button click.
+
+Profile forms expose one receiving-mailbox address; IMAP login uses that address.
+The task/account login email alone determines the OAuth identity and recipient filter.
+Gmail password-based IMAP uses an app password; show an official help link next to
+the password field. Preserve existing backend username compatibility for older clients.
+
+Custom-code profiles have no API-address input or required endpoint. Scripts own
+request addresses/protocols and return the documented code, auth_file or error
+object. Existing apiURL context values remain available for legacy scripts.
+
+OneClickAuthForm is shared by account creation and the existing-account shortcut.
+Existing accounts prefill the bound profile and account login email, merge only
+the binding keys at submission and navigate to the task details. New accounts
+require manual email input and retain the established creation flow.

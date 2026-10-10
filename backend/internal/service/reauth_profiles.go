@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"net/mail"
-	"net/url"
 	"regexp"
 	"sort"
 	"strings"
@@ -109,11 +108,6 @@ func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profi
 		if strings.TrimSpace(profile.IMAPUsername) == "" {
 			profile.IMAPUsername = profile.MailboxAddress
 		}
-	} else {
-		u, err := url.Parse(profile.APIURL)
-		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil {
-			return bad("mailbox API URL must use HTTPS and contain no embedded credentials")
-		}
 	}
 	if len(profile.CodePattern) > 500 || len(profile.Secret) > 8192 || len(profile.CodeScript) > 16384 {
 		return bad("profile field exceeds size limit")
@@ -161,6 +155,9 @@ func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profi
 		if err := json.Unmarshal([]byte(value), &stored); err != nil {
 			return nil, err
 		}
+	}
+	if profile.MailboxMode == "api" && strings.TrimSpace(profile.CodeScript) == "" && stored.EncryptedScript == "" {
+		return bad("custom code is required for this read method")
 	}
 	if profile.Secret != "" || profile.CodeScript != "" {
 		if s.cfg == nil || !s.cfg.Totp.EncryptionKeyConfigured {

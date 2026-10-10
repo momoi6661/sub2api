@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -31,6 +32,7 @@ type ReauthRunnerMailbox struct {
 }
 
 type ReauthRunnerTask struct {
+	OnProgress  func(string)         `json:"-"`
 	Mailbox     *ReauthRunnerMailbox `json:"mailbox,omitempty"`
 	Mode        string               `json:"mode"`
 	Script      string               `json:"script"`
@@ -69,6 +71,7 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	}
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/x-ndjson")
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	defer transport.CloseIdleConnections()
@@ -79,7 +82,36 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	}
 	defer resp.Body.Close()
 	limited := io.LimitReader(resp.Body, 256*1024+1)
-	data, err := io.ReadAll(limited)
+	var data []byte
+	if strings.HasPrefix(resp.Header.Get("Content-Type"), "application/x-ndjson") {
+		scanner := bufio.NewScanner(limited)
+		scanner.Buffer(make([]byte, 4096), 256*1024)
+		total := 0
+		for scanner.Scan() {
+			line := scanner.Bytes()
+			total += len(line) + 1
+			if total > 256*1024 {
+				return nil, &ReauthExecutionError{Code: "INVALID_RUNNER_RESULT", Message: "Runner response exceeds size limit"}
+			}
+			var progress struct {
+				Event string `json:"event"`
+				Stage string `json:"stage"`
+			}
+			if json.Unmarshal(line, &progress) == nil && progress.Event == "progress" {
+				switch progress.Stage {
+				case "mailbox_connect", "browser_start", "email_login", "requesting_code", "waiting_code", "submitting_code", "consent":
+					if task.OnProgress != nil {
+						task.OnProgress(progress.Stage)
+					}
+				}
+			} else {
+				data = append(data[:0], line...)
+			}
+		}
+		err = scanner.Err()
+	} else {
+		data, err = io.ReadAll(limited)
+	}
 	if err != nil || len(data) > 256*1024 {
 		return nil, &ReauthExecutionError{Code: "INVALID_RUNNER_RESULT", Message: "Runner response exceeds size limit"}
 	}

@@ -49,6 +49,10 @@ func NewOAuthHandler(oauthService *service.OAuthService) *OAuthHandler {
 
 // AccountHandler handles admin account management
 type AccountHandler struct {
+	authTaskRepo            service.AuthorizationTaskRepository
+	authTaskWake            chan struct{}
+	authTaskCancel          context.CancelFunc
+	authTaskWG              sync.WaitGroup
 	reauthSettings          *service.SettingService
 	reauthWorker            *service.OneClickAuthWorker
 	reauthLocks             service.LeaderLockCache

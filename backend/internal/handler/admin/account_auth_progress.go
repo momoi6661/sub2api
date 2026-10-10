@@ -15,7 +15,7 @@ import (
 
 type authProgressKey struct{}
 
-// Progress is sent on the task request itself; no polling or background jobs.
+// Drafts and legacy synchronous clients receive progress on the request itself.
 func startAuthProgress(c *gin.Context) context.Context {
 	ctx := c.Request.Context()
 	if c.Query("stream") != "1" {
@@ -47,6 +47,9 @@ func writeAuthEvent(c *gin.Context, event any) {
 }
 
 func finishAuthRequest(c *gin.Context, data any, err error) {
+	if finish, ok := c.Get("auth_task_finish"); ok {
+		finish.(func(error))(err)
+	}
 	if !c.GetBool("one_click_auth_stream") {
 		if err != nil {
 			writeReauthError(c, err)

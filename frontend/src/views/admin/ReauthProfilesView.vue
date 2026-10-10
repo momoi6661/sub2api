@@ -33,7 +33,7 @@
             </div>
           </template>
           <template #cell-mailbox_mode="{ row }">
-            <div class="space-y-1"><span class="badge badge-gray">{{ row.mailbox_mode === 'imap' ? 'IMAP · TLS' : 'HTTPS API' }}</span><p class="text-xs text-gray-500 dark:text-dark-400">{{ t(row.mailbox_mode === 'api' && row.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileResult' : 'admin.accounts.authProfiles.codeResult') }}</p></div>
+            <div class="space-y-1"><span class="badge badge-gray">{{ row.mailbox_mode === 'imap' ? 'IMAP · TLS' : t('admin.accounts.authProfiles.customCode') }}</span><p class="text-xs text-gray-500 dark:text-dark-400">{{ t(row.mailbox_mode === 'api' && row.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileResult' : 'admin.accounts.authProfiles.codeResult') }}</p></div>
           </template>
           <template #cell-secret="{ row }"><ReauthProfileSecret :key="`${row.id}:${credentialRevision}`" :profile-id="row.id" :has-secret="row.has_secret" /></template>
           <template #cell-proxy_ids="{ row }"><span class="text-sm text-gray-500 dark:text-dark-400">{{ proxyCount(row) ? t('admin.accounts.authProfiles.proxyCount', { count: proxyCount(row) }) : t('admin.accounts.authProfiles.accountProxy') }}</span></template>
@@ -92,7 +92,7 @@ const searchQuery = computed({ get: () => queryValue('q'), set: value => setFilt
 const mode = computed({ get: () => ['imap', 'api'].includes(queryValue('mode')) ? queryValue('mode') : '', set: value => setFilter('mode', value) })
 const status = computed({ get: () => ['enabled', 'disabled'].includes(queryValue('status')) ? queryValue('status') : '', set: value => setFilter('status', value) })
 const hasFilters = computed(() => !!(searchQuery.value || mode.value || status.value))
-const modeOptions = computed(() => [{ value: '', label: t('admin.accounts.authProfiles.allModes') }, { value: 'imap', label: 'IMAP · TLS' }, { value: 'api', label: 'HTTPS API' }])
+const modeOptions = computed(() => [{ value: '', label: t('admin.accounts.authProfiles.allModes') }, { value: 'imap', label: 'IMAP · TLS' }, { value: 'api', label: t('admin.accounts.authProfiles.customCode') }])
 const statusOptions = computed(() => [{ value: '', label: t('admin.accounts.authProfiles.allStatuses') }, { value: 'enabled', label: t('common.enabled') }, { value: 'disabled', label: t('common.disabled') }])
 const columns = computed(() => [
   { key: 'name', label: t('admin.accounts.authProfiles.name') },

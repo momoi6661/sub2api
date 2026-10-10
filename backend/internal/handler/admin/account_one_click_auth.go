@@ -29,8 +29,12 @@ func (h *AccountHandler) SetReauthSettings(settings *SettingHandler, locks servi
 	if settings != nil {
 		h.reauthSettings = settings.settingService
 		h.reauthLocks = locks
-		h.reauthWorker = service.NewOneClickAuthWorker(h.adminService, locks, func(ctx context.Context, id int64) error { _, err := h.authorizeOneClick(ctx, id); return err })
+		h.reauthWorker = service.NewOneClickAuthWorker(h.adminService, locks, func(ctx context.Context, id int64) error {
+			_, err := h.authorizeRecorded(ctx, id, "automatic")
+			return err
+		})
 		h.reauthWorker.Start()
+		h.wakeAuthorizationTasks()
 	}
 }
 
@@ -57,7 +61,7 @@ func (h *AccountHandler) RunOneClickAuth(c *gin.Context) {
 		return
 	}
 	ctx := startAuthProgress(c)
-	account, err := h.authorizeOneClick(ctx, id)
+	account, err := h.authorizeRecorded(ctx, id, "manual")
 	if err != nil {
 		finishAuthRequest(c, nil, err)
 		return
@@ -143,6 +147,21 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(startAuthProgress(c), 135*time.Second)
 	defer cancel()
+	draft := &service.Account{Platform: service.PlatformOpenAI, Type: "oauth", ProxyID: input.ProxyID, Extra: map[string]any{
+		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail,
+	}}
+	record := h.taskSnapshot(ctx, draft, "new_account", "running")
+	if err := h.authTaskRepo.Create(ctx, []*service.AuthorizationTask{record}); err != nil {
+		finishAuthRequest(c, nil, err)
+		return
+	}
+	ctx = h.recordedProgress(ctx, record.ID)
+	c.Set("auth_task_finish", func(err error) {
+		if ctx.Err() != nil {
+			err = ctx.Err()
+		}
+		h.finishAuthRecord(record.ID, "ready", err)
+	})
 	// Keep email out of lock keys, and prevent repeat requests for the same draft.
 	digest := sha256.Sum256([]byte(input.ProfileID + "\x00" + strings.ToLower(input.LoginEmail)))
 	key := fmt.Sprintf("one_click_auth_draft:%x", digest)
@@ -173,9 +192,6 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 			_ = h.reauthLocks.ReleaseLeaderLock(releaseCtx, key, owner)
 		}()
 	}
-	draft := &service.Account{Platform: service.PlatformOpenAI, Type: "oauth", ProxyID: input.ProxyID, Extra: map[string]any{
-		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail,
-	}}
 	payload, err := h.authorizeReauthProfile(ctx, draft)
 	if err != nil {
 		finishAuthRequest(c, nil, err)
@@ -221,8 +237,13 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	task := service.ReauthRunnerTask{Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
 		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
+	task.OnProgress = func(stage string) { authProgress(ctx, stage) }
 	if profile.MailboxMode == "imap" {
 		task.Mailbox = &service.ReauthRunnerMailbox{Host: profile.IMAPHost, Port: profile.IMAPPort, Username: profile.IMAPUsername, Folder: profile.Folder, SenderFilter: profile.SenderFilter, CodePattern: profile.CodePattern}
+		// Google displays app passwords in groups; spaces are not part of the password.
+		if strings.EqualFold(profile.IMAPHost, "imap.gmail.com") {
+			task.Context["secret"] = strings.ReplaceAll(material["secret"], " ", "")
+		}
 	}
 
 	var sessionID string
@@ -324,7 +345,11 @@ func chooseReauthProxy(profile *service.ReauthProfile, fallback *int64) (*int64,
 }
 
 func (h *AccountHandler) StopOneClickAuth() {
+	if h.authTaskCancel != nil {
+		h.authTaskCancel()
+	}
 	if h.reauthWorker != nil {
 		h.reauthWorker.Stop()
 	}
+	h.authTaskWG.Wait()
 }

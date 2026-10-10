@@ -60,7 +60,7 @@ export async function applyReauthFile(accountID: number, content: string): Promi
   return data
 }
 
-export type AuthorizationStage = 'preparing' | 'configuration' | 'connecting' | 'browser_authorization' | 'authorization_file' | 'verifying' | 'saving'
+export type AuthorizationStage = 'preparing' | 'configuration' | 'connecting' | 'browser_authorization' | 'authorization_file' | 'verifying' | 'saving' | 'mailbox_connect' | 'browser_start' | 'email_login' | 'requesting_code' | 'waiting_code' | 'submitting_code' | 'consent'
 export interface AuthorizationProgress { event: 'progress'; stage: AuthorizationStage }
 export type ProgressCallback = (progress: AuthorizationProgress) => void
 
@@ -102,6 +102,27 @@ function authorizationRequestConfig(onProgress?: ProgressCallback, signal?: Abor
 
 export async function runOneClickAuth(accountID: number, onProgress?: ProgressCallback, signal?: AbortSignal): Promise<Account> {
   const { data } = await apiClient.post<Account>(`/admin/accounts/${accountID}/one-click-auth`, {}, authorizationRequestConfig(onProgress, signal))
+  return data
+}
+
+export interface AuthorizationTask {
+  id: number; account_id: number; account_name: string; login_email: string
+  profile_id: string; profile_name: string; source: 'manual' | 'batch' | 'automatic' | 'new_account'
+  status: 'queued' | 'running' | 'succeeded' | 'ready' | 'failed'; stage: AuthorizationStage
+  created_at: string; started_at: string | null; finished_at: string | null
+  events: { stage: AuthorizationStage; at: string }[]; error_code: string; error_message: string
+}
+export interface AuthorizationTaskPage { items: AuthorizationTask[]; total: number; active_count: number }
+export async function submitAuthorizationTasks(accountIDs: number[], binding?: { profile_id: string; login_email: string }): Promise<AuthorizationTask[]> {
+  const { data } = await apiClient.post<AuthorizationTask[]>('/admin/authorization-tasks', { account_ids: accountIDs, ...binding })
+  return data
+}
+export async function listAuthorizationTasks(params: { q?: string; status?: string; page?: number; page_size?: number }, signal?: AbortSignal): Promise<AuthorizationTaskPage> {
+  const { data } = await apiClient.get<AuthorizationTaskPage>('/admin/authorization-tasks', { params, signal })
+  return data
+}
+export async function getAuthorizationTask(id: number, signal?: AbortSignal): Promise<AuthorizationTask> {
+  const { data } = await apiClient.get<AuthorizationTask>(`/admin/authorization-tasks/${id}`, { signal })
   return data
 }
 

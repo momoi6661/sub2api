@@ -556,6 +556,12 @@ const routes: RouteRecordRaw[] = [
     meta: { requiresAuth: true, requiresAdmin: true, title: 'Authorization Profiles', titleKey: 'admin.accounts.authProfiles.title' }
   },
   {
+    path: '/admin/authorization-tasks',
+    name: 'AdminAuthorizationTasks',
+    component: () => import('@/views/admin/AuthorizationTasksView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true, title: 'Authorization Tasks', titleKey: 'admin.accounts.authorizationTasks.title' }
+  },
+  {
     path: '/admin/proxies',
     name: 'AdminProxies',
     component: () => import('@/views/admin/ProxiesView.vue'),

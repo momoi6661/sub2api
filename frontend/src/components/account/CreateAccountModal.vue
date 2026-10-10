@@ -3608,7 +3608,7 @@
         <button type="button" :class="['btn', newAuthMethod === 'one-click' ? 'btn-primary' : 'btn-secondary']" :aria-pressed="newAuthMethod === 'one-click'" :disabled="submitting || currentOAuthLoading" @click="newAuthMethod = 'one-click'">{{ t('admin.accounts.oneClickAuth.title') }}</button>
         <button type="button" :class="['btn', newAuthMethod === 'manual' ? 'btn-primary' : 'btn-secondary']" :aria-pressed="newAuthMethod === 'manual'" :disabled="submitting" @click="newAuthMethod = 'manual'">{{ t('admin.accounts.oneClickAuth.otherMethods') }}</button>
       </div>
-      <NewAccountOneClickAuth
+      <OneClickAuthForm
         v-if="form.platform === 'openai' && newAuthMethod === 'one-click'"
         :proxyID="form.proxy_id"
         :submitting="submitting"
@@ -4067,7 +4067,7 @@ import {
   type OpenAIWSMode
 } from '@/utils/openaiWsMode'
 import OAuthAuthorizationFlow from './OAuthAuthorizationFlow.vue'
-import NewAccountOneClickAuth from './NewAccountOneClickAuth.vue'
+import OneClickAuthForm from './OneClickAuthForm.vue'
 import type { NewAccountAuthorization } from '@/api/admin/reauthProfiles'
 
 // Type for exposed OAuthAuthorizationFlow component

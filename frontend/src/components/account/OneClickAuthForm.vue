@@ -1,6 +1,6 @@
 <template>
   <form id="new-account-one-click-auth" class="space-y-4" @submit.prevent="authorize">
-    <p class="text-sm text-gray-500 dark:text-dark-400">{{ t('admin.accounts.oneClickAuth.createHint') }}</p>
+    <p class="text-sm text-gray-500 dark:text-dark-400">{{ t(accountID ? 'admin.accounts.authorizationTasks.existingHint' : 'admin.accounts.oneClickAuth.createHint') }}</p>
     <div>
       <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
         <label for="new-account-auth-profile" class="input-label mb-0">{{ t('admin.accounts.oneClickAuth.profile') }}</label>
@@ -15,7 +15,7 @@
       <input id="new-account-auth-email" v-model="loginEmail" class="input" type="email" required maxlength="254" autocomplete="email" :disabled="busy" placeholder="name@example.com" />
     </div>
     <p class="input-hint">{{ t('admin.accounts.authProfiles.browser') }}</p>
-    <OneClickAuthProgress v-if="taskStartedAt" :stage="submitting ? 'saving' : taskStage" :status="busy ? 'running' : error ? 'failed' : 'ready'" :started-at="taskStartedAt" :finished-at="busy ? undefined : taskFinishedAt" :error="error && errorCode ? `${errorCode} · ${t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable')}` : undefined" />
+    <OneClickAuthProgress v-if="taskStartedAt && !accountID" :stage="submitting ? 'saving' : taskStage" :status="busy ? 'running' : error ? 'failed' : 'ready'" :started-at="taskStartedAt" :finished-at="busy ? undefined : taskFinishedAt" :error="error && errorCode ? `${errorCode} · ${t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable')}` : undefined" />
     <p v-if="authorization" role="status" class="text-sm text-green-600 dark:text-green-400">{{ t('admin.accounts.oneClickAuth.readyToCreate') }}</p>
     <div v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-sm text-red-700 dark:bg-red-900/20 dark:text-red-400">
       <p>{{ error }}</p>
@@ -23,7 +23,7 @@
     </div>
     <button type="submit" class="btn btn-primary w-full sm:w-auto" :disabled="busy || loading || !selectedEnabled || !loginEmail.trim()">
       <Icon v-if="busy" name="refresh" size="md" class="mr-2 animate-spin" />
-      {{ t(busy ? 'admin.accounts.oauth.verifying' : authorization ? 'common.create' : 'admin.accounts.oneClickAuth.authorizeAndCreate') }}
+      {{ t(busy ? 'admin.accounts.oauth.verifying' : accountID ? 'admin.accounts.authorizationTasks.submit' : authorization ? 'common.create' : 'admin.accounts.oneClickAuth.authorizeAndCreate') }}
     </button>
     <ReauthProfileEditor :show="showEditor" @close="showEditor = false" @saved="profileCreated" />
   </form>
@@ -36,14 +36,14 @@ import Icon from '@/components/icons/Icon.vue'
 import ReauthProfileSelect from './ReauthProfileSelect.vue'
 import ReauthProfileEditor from './ReauthProfileEditor.vue'
 import OneClickAuthProgress from './OneClickAuthProgress.vue'
-import { authorizeNewAccount, listReauthProfiles, type AuthorizationStage, type NewAccountAuthorization, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import { authorizeNewAccount, listReauthProfiles, submitAuthorizationTasks, type AuthorizationTask, type AuthorizationStage, type NewAccountAuthorization, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { extractApiErrorCode, extractApiErrorMessage, extractApiErrorMetadata } from '@/utils/apiError'
 
-const props = defineProps<{ proxyID: number | null; submitting: boolean }>()
-const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string] }>()
+const props = withDefaults(defineProps<{ proxyID?: number | null; submitting?: boolean; accountID?: number; initialProfileID?: string; initialLoginEmail?: string }>(), { proxyID: null, submitting: false, initialProfileID: '', initialLoginEmail: '' })
+const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string]; submitted: [task: AuthorizationTask] }>()
 const { t } = useI18n()
 const profiles = ref<ReauthProfile[]>([])
-const profileID = ref(''), loginEmail = ref('')
+const profileID = ref(props.initialProfileID), loginEmail = ref(props.initialLoginEmail)
 const loading = ref(false), authorizing = ref(false), showEditor = ref(false)
 const loadError = ref(''), error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const authorization = shallowRef<NewAccountAuthorization | null>(null)
@@ -82,6 +82,11 @@ async function authorize() {
   taskStartedAt.value = Date.now(); taskFinishedAt.value = undefined; taskStage.value = 'preparing'
   authorizing.value = true; error.value = ''; errorCode.value = ''
   try {
+    if (props.accountID) {
+      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email })
+      if (!disposed) emit('submitted', task)
+      return
+    }
     if (!authorization.value) {
       const result = await authorizeNewAccount(selectedProfile, email, props.proxyID, taskController.signal, progress => {
         if (!disposed && !taskController.signal.aborted) taskStage.value = progress.stage

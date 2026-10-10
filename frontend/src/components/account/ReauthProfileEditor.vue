@@ -13,13 +13,11 @@
       <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label for="auth-profile-host" class="input-label">{{ t('admin.accounts.authProfiles.host') }}</label><input id="auth-profile-host" v-model="form.imap_host" class="input" required /></div>
         <div><label for="auth-profile-port" class="input-label">{{ t('admin.accounts.authProfiles.port') }}</label><input id="auth-profile-port" v-model.number="form.imap_port" class="input" type="number" min="1" max="65535" required /></div>
-        <div class="sm:col-span-2"><label for="auth-profile-user" class="input-label">{{ t('admin.accounts.authProfiles.username') }}</label><input id="auth-profile-user" v-model="form.imap_username" class="input" :placeholder="form.mailbox_address" /></div>
       </div>
       <div v-else class="space-y-3">
         <label for="auth-profile-result" class="input-label">{{ t('admin.accounts.authProfiles.resultType') }}</label>
         <Select id="auth-profile-result" v-model="form.api_result_type" :options="resultTypeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.resultType')" />
         <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
-        <label for="auth-profile-api" class="input-label">{{ t('admin.accounts.authProfiles.apiURL') }}</label><input id="auth-profile-api" v-model="form.api_url" type="url" class="input" required placeholder="https://" />
         <label for="auth-profile-script" class="input-label">{{ t('admin.accounts.authProfiles.script') }}</label>
         <textarea id="auth-profile-script" v-model="form.code_script" class="input min-h-48 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="scriptExample" />
         <p class="input-hint">{{ t(form.has_code_script ? 'admin.accounts.authProfiles.scriptKeep' : 'admin.accounts.authProfiles.scriptHint') }}</p>
@@ -40,6 +38,7 @@
           <button type="button" class="absolute inset-y-0 right-0 flex w-11 items-center justify-center rounded-r-lg text-gray-500 hover:text-gray-900 focus-visible:ring-2 focus-visible:ring-primary-500 dark:hover:text-white" :aria-label="t(showSecret ? 'admin.accounts.authProfiles.hideSecret' : 'admin.accounts.authProfiles.showSecret')" :aria-pressed="showSecret" @click="showSecret = !showSecret"><Icon :name="showSecret ? 'eyeOff' : 'eye'" size="md" /></button>
         </div>
         <p class="input-hint">{{ t(form.has_secret ? 'admin.accounts.authProfiles.secretKeep' : 'admin.accounts.authProfiles.secretHint') }}</p>
+        <p v-if="form.mailbox_mode === 'imap' && /(^|\.)gmail\.com$/i.test(form.imap_host)" class="input-hint">{{ t('admin.accounts.authProfiles.gmailPasswordHint') }} <a href="https://support.google.com/mail/answer/185833" target="_blank" rel="noopener noreferrer" class="text-primary-600 underline dark:text-primary-400">{{ t('admin.accounts.authProfiles.gmailPasswordHelp') }}</a></p>
       </div>
       <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label for="auth-profile-folder" class="input-label">{{ t('admin.accounts.authProfiles.folder') }}</label><input id="auth-profile-folder" v-model="form.folder" class="input" /></div>
@@ -68,7 +67,7 @@ import type { Proxy } from '@/types'
 const props = defineProps<{ show: boolean; profile?: ReauthProfile | null }>()
 const emit = defineEmits<{ close: []; saved: [profile: ReauthProfile] }>()
 const { t } = useI18n()
-const mailboxModeOptions = [{ value: 'imap', label: 'IMAP (TLS)' }, { value: 'api', label: 'HTTPS API' }]
+const mailboxModeOptions = computed(() => [{ value: 'imap', label: 'IMAP (TLS)' }, { value: 'api', label: t('admin.accounts.authProfiles.customCode') }])
 const resultTypeOptions = computed(() => [
   { value: 'code', label: t('admin.accounts.authProfiles.codeResult') },
   { value: 'auth_file', label: t('admin.accounts.authProfiles.fileResult') }
@@ -81,9 +80,10 @@ const showSecret = ref(false)
 const error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const testEmail = ref(''), testResult = ref(''), testing = ref(false)
 let testAbort: AbortController | null = null
-const scriptExample = computed(() => `// context: loginEmail, since, apiURL, mailboxAddress, secret
-// Filter messages by recipient and date in your API request.
-const response = await fetch(context.apiURL, {
+const scriptExample = computed(() => `// context: loginEmail, since, mailboxAddress, secret
+// Set your endpoint and request options in this code.
+// Filter messages by recipient and date in your request.
+const response = await fetch('https://your-mail-service.example/messages', {
   headers: { Authorization: 'Bearer ' + context.secret },
   credentials: 'omit'
 });
@@ -113,7 +113,7 @@ async function save() {
   if (saving.value) return
   saving.value = true
   error.value = ''
-  try { emit('saved', await saveReauthProfile(form.value)); form.value.secret = ''; form.value.code_script = ''; emit('close') }
+  try { emit('saved', await saveReauthProfile({ ...form.value, imap_username: form.value.mailbox_address.trim() })); form.value.secret = ''; form.value.code_script = ''; emit('close') }
   catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
   finally { saving.value = false }
 }

@@ -568,6 +568,10 @@ func registerPromoCodeRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
 }
 
 func registerSettingsRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	tasks := admin.Group("/authorization-tasks")
+	tasks.GET("", h.Admin.Account.ListAuthorizationTasks)
+	tasks.POST("", h.Admin.Account.SubmitAuthorizationTasks)
+	tasks.GET("/:id", h.Admin.Account.GetAuthorizationTask)
 	profiles := admin.Group("/reauth-profiles")
 	profiles.GET("", h.Admin.Setting.ListReauthProfiles)
 	profiles.POST("", h.Admin.Setting.SaveReauthProfile)

@@ -458,3 +458,26 @@ for (const workspaceIndex of [0, 1]) test(`personal consent without a workspace 
   assert.equal(result.type, 'auth_file', JSON.stringify(result))
   assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
 })
+
+for (const marker of [{ structure: 'personal' }, { workspace_type: 'personal' }, { type: 'PERSONAL' }]) test(`personal-only fallback recognizes provider metadata ${JSON.stringify(marker)}`, async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1', ...marker }], expectedWorkspace: 'account-1' })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex: 0 }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file', JSON.stringify(result))
+})
+test('a missing legacy team falls back to the only personal workspace and validates the selected ID', async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1', structure: 'personal' }], expectedWorkspace: 'account-1' })
+  const result = await authorizeWithProtocol(makeTask({ expectedAccountID: 'old-team' }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file', JSON.stringify(result))
+})
+test('disabled teams do not block fallback to personal', async () => {
+  const mock = provider({ workspaces: [{ id: 'unavailable-team', disabled: true }, { id: 'account-1', structure: 'personal' }], expectedWorkspace: 'account-1' })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex: 1 }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file', JSON.stringify(result))
+})
+
+test('personal consent without a picker replaces an unavailable legacy team without requesting workspace selection', async () => {
+  const mock = provider({ personalConsent: true, consentHTML: '<form method="post"><input type="hidden" name="csrf" value="test-csrf"><button type="submit" name="intent" value="allow">Continue</button></form>' })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex: 4, expectedAccountID: 'old-team' }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file', JSON.stringify(result))
+  assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
+})

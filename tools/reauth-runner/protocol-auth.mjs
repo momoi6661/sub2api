@@ -39,7 +39,7 @@ function nextURL(data) {
 
 // The state and verifier are task-local; cookies never survive this function.
 export async function authorizeWithProtocol(task, executeScript, signal, report = () => {}, fetchOverride) {
-  let transport, sentinel, deviceID, selectedWorkspaceID, phase = 'PROTOCOL_CONNECTION_FAILED'
+  let transport, sentinel, deviceID, selectedWorkspaceID, personalConsent = false, phase = 'PROTOCOL_CONNECTION_FAILED'
   try {
     signal?.throwIfAborted()
     const workspaceIndex = task.context.workspaceIndex ?? 1
@@ -232,14 +232,14 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         try {
           const value = JSON.parse(Buffer.from(part || '', 'base64url').toString())
           if (Array.isArray(value.workspaces) && value.workspaces.length) {
-            workspaces = value.workspaces.filter(item => item && typeof item.id === 'string' && item.id.trim())
+            workspaces = value.workspaces.filter(item => item && item.disabled !== true && typeof (item.id || item.workspace_id) === 'string' && (item.id || item.workspace_id).trim()).map(item => ({ ...item, id: item.id || item.workspace_id }))
             if (workspaces.length) break
           }
         } catch { /* Cookie format is provider-owned. */ }
       }
       const consentForm = readConsentForm(step.text || '', step.url.href)
       if (consentForm?.workspaces.length) workspaces = consentForm.workspaces
-      if (!workspaces.length && consentForm?.fields && workspaceIndex <= 1) {
+      if (!workspaces.length && consentForm?.fields) {
         // Follow the provider's own personal-only consent form, never invent a workspace ID.
         const confirmed = await request(consentForm.action, {
           method: 'POST', allowHTMLResponse: true,
@@ -250,17 +250,18 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'Personal consent did not return an authorization callback')
         step = await follow(target)
         if (!step.code) reject('PROTOCOL_STEP_UNSUPPORTED', 'Personal consent did not complete authorization')
+        personalConsent = true
       } else {
         if (!workspaces.length) reject('WORKSPACE_LIST_UNAVAILABLE', 'The authorization session did not provide a usable workspace list or personal consent form', true)
         const expectedID = task.context.expectedAccountID
-        const isPersonal = item => item.is_personal === true || item.type === 'personal' ||
+        const isPersonal = item => item.is_personal === true || [item.type, item.workspace_type, item.structure].some(value => String(value || '').toLowerCase() === 'personal') ||
           /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))
         // Team workspaces take priority; personal is allowed when it is the only option.
         // Keep a known account identity stable when reauthorizing.
         const personal = workspaces.filter(isPersonal)
         const teams = workspaces.filter(item => !isPersonal(item))
         const eligible = workspaceIndex === 0 ? personal : teams.length ? teams : personal
-        const workspace = expectedID ? workspaces.find(item => item.id === expectedID)
+        const workspace = expectedID ? workspaces.find(item => item.id === expectedID) || (!teams.length ? personal[0] : undefined)
           : workspaceIndex === 0 ? personal[0]
             : teams.length ? teams[workspaceIndex - 1]
               : personal[workspaceIndex - 1] || personal[0]
@@ -287,7 +288,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
     }
     const identity = claims(data.id_token)
     const accountID = identity['https://api.openai.com/auth']?.chatgpt_account_id
-    if (typeof identity.email !== 'string' || identity.email.toLowerCase() !== task.context.loginEmail.toLowerCase() || !accountID || (task.context.expectedAccountID && accountID !== task.context.expectedAccountID) || (selectedWorkspaceID && accountID !== selectedWorkspaceID)) {
+    if (typeof identity.email !== 'string' || identity.email.toLowerCase() !== task.context.loginEmail.toLowerCase() || !accountID || (task.context.expectedAccountID && !selectedWorkspaceID && !personalConsent && accountID !== task.context.expectedAccountID) || (selectedWorkspaceID && accountID !== selectedWorkspaceID)) {
       reject('IDENTITY_MISMATCH', 'Authorized identity does not match the requested account')
     }
     signal?.throwIfAborted()

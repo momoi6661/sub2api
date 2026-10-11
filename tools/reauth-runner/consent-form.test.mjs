@@ -35,3 +35,10 @@ test('personal consent form preserves hidden fields without inventing a workspac
  assert.deepEqual(form.workspaces,[])
  assert.deepEqual(form.fields,[['csrf','secret&value'],['intent','allow']])
 })
+
+test('streamed personal structure is preserved for workspace classification', () => {
+ const flat=[{"_1":2},"workspaces",[3],{"_4":5,"_6":7},"id","personal-id","structure","personal"]
+ const literal=JSON.stringify(JSON.stringify(flat))
+ const form=readConsentForm(`<form method="post"></form><script>streamController.enqueue(${literal});</script>`,url)
+ assert.equal(form.workspaces[0].type,'personal')
+})

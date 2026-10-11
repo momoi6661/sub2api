@@ -34,7 +34,7 @@ function streamedWorkspaces(nodes) {
           const list = decode(entry['_' + key])
           if (!Array.isArray(list)) continue
           const workspaces = list.filter(item => item && typeof (item.id || item.workspace_id) === 'string' && (item.id || item.workspace_id).trim() && item.disabled !== true)
-            .map(item => ({ id: item.id || item.workspace_id, title: item.title || item.name || '', type: item.type || item.workspace_type || '', is_personal: item.is_personal === true }))
+            .map(item => ({ id: item.id || item.workspace_id, title: item.title || item.name || '', type: item.type || item.workspace_type || item.structure || '', is_personal: item.is_personal === true }))
           if (workspaces.length) return workspaces
         }
       } catch { /* Unsupported or partial stream data falls back to form controls. */ }

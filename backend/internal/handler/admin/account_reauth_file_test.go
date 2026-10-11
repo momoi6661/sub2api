@@ -54,3 +54,40 @@ func TestReauthProtocolAuthFileIdentityAndExpiry(t *testing.T) {
 		})
 	}
 }
+
+func TestProtocolReauthCanSaveSelectedPersonalWorkspaceWithoutChangingOwner(t *testing.T) {
+	for _, email := range []string{"owner@example.com", "other@example.com"} {
+		expires := time.Now().Add(time.Hour)
+		identity := map[string]any{"email": email, "https://api.openai.com/auth": map[string]any{"chatgpt_account_id": "personal-space"}}
+		token := buildCodexImportTestJWT(t, expires, identity)
+		content, err := json.Marshal(map[string]any{
+			"type": "codex", "access_token": token, "id_token": token, "refresh_token": "test-refresh",
+			"email": email, "account_id": "personal-space", "expires_at": expires.UTC().Format(time.RFC3339),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		account := &service.Account{ID: 10, Platform: service.PlatformOpenAI, Type: "oauth",
+			Credentials: map[string]any{"chatgpt_account_id": "old-team"},
+			Extra:       map[string]any{"one_click_auth_login_email": "owner@example.com", "one_click_auth_workspace_index": 0}}
+		payload, err := normalizeProtocolReauthAuthFile(string(content), account)
+		if email != "owner@example.com" {
+			if err == nil {
+				t.Fatal("different owner accepted")
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payload.Credentials["chatgpt_account_id"] != "personal-space" {
+			t.Fatal("selected personal identity was not retained")
+		}
+		if account.Credentials["chatgpt_account_id"] != "old-team" {
+			t.Fatal("normalization modified the existing account")
+		}
+		if _, err := normalizeReauthAuthFile(string(content), account); err == nil {
+			t.Fatal("manual/custom file unexpectedly bypassed identity matching")
+		}
+	}
+}

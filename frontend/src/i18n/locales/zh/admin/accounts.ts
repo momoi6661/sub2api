@@ -341,6 +341,7 @@ export default {
 
         script: '自定义 JavaScript',
         customInput: '自定义输入',
+        bulkTitle: '一键授权配置',
         customInputHint: '可留空；例如：邮箱----密码----2FA密钥。内容会原样传给代码变量 input。',
         customInputDescription: 'input 是输入框的原始文本，不包装、不解析；JSON 请在代码中使用 JSON.parse(input)。允许留空。',
         customParamsTitle: '自定义代码可用参数',

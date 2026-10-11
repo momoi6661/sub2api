@@ -31,6 +31,22 @@
         </p>
       </div>
 
+      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <label class="flex items-center gap-2 input-label mb-2">
+          <input v-model="enableOneClickAuth" type="checkbox" />
+          {{ t('admin.accounts.authProfiles.bulkTitle') }}
+        </label>
+        <div v-if="enableOneClickAuth" class="space-y-3 rounded-lg bg-primary-50 p-3 dark:bg-primary-950/20">
+          <select v-model="oneClickAuthProfile" class="input" required>
+            <option value="">{{ t('admin.accounts.authProfiles.profile') }}</option>
+            <option v-for="profile in authProfiles.filter(item => item.enabled)" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
+          </select>
+          <input v-model="oneClickAuthLoginEmail" class="input" :placeholder="t('admin.accounts.authProfiles.loginEmail')" />
+          <textarea v-model="oneClickAuthCustomInput" class="input min-h-20 font-mono" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />
+          <input v-model.number="oneClickAuthWorkspaceIndex" class="input" type="number" min="1" step="1" :placeholder="t('admin.accounts.oneClickAuth.workspaceIndex')" />
+        </div>
+      </div>
+
       <!-- OpenAI passthrough -->
       <div
         v-if="allOpenAIPassthroughCapable"
@@ -1492,6 +1508,7 @@ import ConfirmDialog from '@/components/common/ConfirmDialog.vue'
 import Select from '@/components/common/Select.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
+import { listReauthProfiles, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import Icon from '@/components/icons/Icon.vue'
 import {
@@ -1541,6 +1558,13 @@ const emit = defineEmits<{
 
 const { t } = useI18n()
 const appStore = useAppStore()
+const enableOneClickAuth = ref(false)
+const authProfiles = ref<ReauthProfile[]>([])
+const oneClickAuthProfile = ref('')
+const oneClickAuthLoginEmail = ref('')
+const oneClickAuthCustomInput = ref('')
+const oneClickAuthWorkspaceIndex = ref(1)
+watch(() => props.show, async show => { if (show && !authProfiles.value.length) { try { authProfiles.value = await listReauthProfiles() } catch { /* optional bulk section */ } } })
 
 // Platform awareness
 const targetMode = computed(() => props.target?.mode ?? 'selected')
@@ -1936,6 +1960,15 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
       updates.extra = {}
     }
     return updates.extra as Record<string, unknown>
+  }
+
+  if (enableOneClickAuth.value && allOpenAIOAuth.value) {
+    if (!oneClickAuthProfile.value) return null
+    const extra = ensureExtra()
+    extra.one_click_auth_profile_id = oneClickAuthProfile.value
+    extra.one_click_auth_login_email = oneClickAuthLoginEmail.value.trim()
+    extra.one_click_auth_custom_input = oneClickAuthCustomInput.value
+    extra.one_click_auth_workspace_index = Math.max(1, Math.floor(oneClickAuthWorkspaceIndex.value || 1))
   }
 
   if (enableProxy.value) {

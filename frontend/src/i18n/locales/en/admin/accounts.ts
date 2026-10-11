@@ -547,6 +547,7 @@ export default {
 
         script: 'Custom JavaScript',
         customInput: 'Custom input',
+        bulkTitle: 'One-click authorization settings',
         customInputHint: 'Optional; for example email----password----2FA-secret. It is passed unchanged to input.',
         customInputDescription: 'input is the raw text, without wrapping or parsing. Parse JSON in your script with JSON.parse(input). May be empty.',
         customParamsTitle: 'Parameters available to custom code',

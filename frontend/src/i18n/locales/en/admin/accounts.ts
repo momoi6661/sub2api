@@ -529,6 +529,7 @@ export default {
         autoHint: "Off by default. Checks authentication failures every minute and attempts each failed credential state once. No infinite retries on errors or timeouts. Retry manually from the account list.",
         lastAutomatic: "Last automatic authorization",
         batchAuthorize: 'Batch one-click authorization',
+        profile: 'Authorization profile',
         notRetryable: "Fix configuration or handle manually",
         retryable: "May retry manually",
         rulesTimeout: "One execution per account. Scripts have 30 seconds and protocol authorization 120 seconds. Errors and timeouts terminate the task. No one-click mode launches a browser.",

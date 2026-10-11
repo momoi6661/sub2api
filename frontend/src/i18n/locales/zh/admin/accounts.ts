@@ -323,6 +323,7 @@ export default {
         autoHint: "默认关闭。开启后每分钟检查授权失效，每次失效记录自动执行一次；错误或超时不会无限重试，可在账号列表手动重试。",
         lastAutomatic: "最近自动授权",
         batchAuthorize: '批量一键授权',
+        profile: '授权配置',
         notRetryable: "请修正配置或人工处理",
         retryable: "可以手动重试",
         rulesTimeout: "每个账号执行一次：代码最多 30 秒，协议授权最多 120 秒。错误或超时立即终止；所有一键授权模式均不启动浏览器。",

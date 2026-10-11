@@ -1712,6 +1712,9 @@
           <p v-if="authProfilesError" role="alert" class="text-sm text-red-600">{{ authProfilesError }}</p>
           <label for="one-click-login-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
           <input id="one-click-login-email" v-model="oneClickLoginEmail" type="email" class="input" />
+          <label for="one-click-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
+          <input id="one-click-workspace-index" v-model.number="oneClickWorkspaceIndex" type="number" min="1" step="1" required class="input" />
+          <p class="input-hint">{{ t('admin.accounts.oneClickAuth.workspaceIndexHint') }}</p>
           <p class="input-hint">{{ t('admin.accounts.authProfiles.isolation') }}</p>
         </div>
         <ReauthProfileEditor :show="showAuthProfileEditor" @close="showAuthProfileEditor = false" @saved="authProfileCreated" />
@@ -3705,6 +3708,7 @@ const autoPauseOnExpired = ref(false)
 const oneClickAuthEnabled = ref(false)
 const oneClickAuthProfile = ref('')
 const oneClickLoginEmail = ref('')
+const oneClickWorkspaceIndex = ref(1)
 const authProfiles = ref<ReauthProfile[]>([])
 const authProfilesLoading = ref(false)
 const authProfilesError = ref('')
@@ -4256,6 +4260,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	const extra = newAccount.extra as Record<string, unknown> | undefined
 	oneClickAuthEnabled.value = extra?.one_click_auth_enabled === true
 	oneClickAuthProfile.value = typeof extra?.one_click_auth_profile_id === 'string' ? extra.one_click_auth_profile_id : ''
+  oneClickWorkspaceIndex.value = Number(extra?.one_click_auth_workspace_index || 1)
   oneClickLoginEmail.value = typeof extra?.one_click_auth_login_email === 'string' ? extra.one_click_auth_login_email : (typeof credentials?.email === 'string' ? credentials.email : '')
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
@@ -5965,12 +5970,13 @@ const handleSubmit = async () => {
     if (props.account.platform === 'openai' && props.account.type === 'oauth' && !isSparkShadow.value) {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra = { ...currentExtra }
-      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim()) {
+      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim() || newExtra.one_click_auth_workspace_index !== oneClickWorkspaceIndex.value) {
         newExtra.one_click_auth_auto_attempt = ''
       }
       newExtra.one_click_auth_enabled = oneClickAuthEnabled.value
       newExtra.one_click_auth_profile_id = oneClickAuthProfile.value
       newExtra.one_click_auth_login_email = oneClickLoginEmail.value.trim()
+      newExtra.one_click_auth_workspace_index = oneClickWorkspaceIndex.value
       delete newExtra.one_click_auth_profile
       updatePayload.extra = newExtra
     }

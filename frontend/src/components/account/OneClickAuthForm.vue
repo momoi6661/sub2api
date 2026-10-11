@@ -14,7 +14,7 @@
       <label for="new-account-auth-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
       <input id="new-account-auth-email" v-model="loginEmail" class="input" type="email" required maxlength="254" autocomplete="email" :disabled="busy" placeholder="name@example.com" />
     </div>
-    <div v-if="!accountID">
+    <div>
       <label for="new-account-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
       <input id="new-account-workspace-index" v-model.number="workspaceIndex" class="input" type="number" min="1" step="1" required :disabled="busy" />
       <p class="input-hint">{{ t('admin.accounts.oneClickAuth.workspaceIndexHint') }}</p>
@@ -44,12 +44,12 @@ import OneClickAuthProgress from './OneClickAuthProgress.vue'
 import { authorizeNewAccount, listReauthProfiles, submitAuthorizationTasks, type AuthorizationTask, type AuthorizationStage, type NewAccountAuthorization, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { extractApiErrorCode, extractApiErrorMessage, extractApiErrorMetadata } from '@/utils/apiError'
 
-const props = withDefaults(defineProps<{ proxyID?: number | null; submitting?: boolean; accountID?: number; initialProfileID?: string; initialLoginEmail?: string }>(), { proxyID: null, submitting: false, initialProfileID: '', initialLoginEmail: '' })
+const props = withDefaults(defineProps<{ proxyID?: number | null; submitting?: boolean; accountID?: number; initialProfileID?: string; initialLoginEmail?: string; initialWorkspaceIndex?: number }>(), { proxyID: null, submitting: false, initialProfileID: '', initialLoginEmail: '', initialWorkspaceIndex: 1 })
 const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string, workspaceIndex: number]; submitted: [task: AuthorizationTask] }>()
 const { t } = useI18n()
 const profiles = ref<ReauthProfile[]>([])
 const profileID = ref(props.initialProfileID), loginEmail = ref(props.initialLoginEmail)
-const workspaceIndex = ref(1)
+const workspaceIndex = ref(props.initialWorkspaceIndex)
 const loading = ref(false), authorizing = ref(false), showEditor = ref(false)
 const loadError = ref(''), error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const authorization = shallowRef<NewAccountAuthorization | null>(null)
@@ -89,7 +89,7 @@ async function authorize() {
   authorizing.value = true; error.value = ''; errorCode.value = ''
   try {
     if (props.accountID) {
-      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email })
+      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email, workspace_index: workspaceIndex.value })
       if (!disposed) emit('submitted', task)
       return
     }

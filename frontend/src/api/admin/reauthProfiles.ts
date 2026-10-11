@@ -115,7 +115,7 @@ export interface AuthorizationTask {
   events: { stage: AuthorizationStage; at: string }[]; error_code: string; error_message: string
 }
 export interface AuthorizationTaskPage { items: AuthorizationTask[]; total: number; active_count: number }
-export async function submitAuthorizationTasks(accountIDs: number[], binding?: { profile_id: string; login_email: string }): Promise<AuthorizationTask[]> {
+export async function submitAuthorizationTasks(accountIDs: number[], binding?: { profile_id: string; login_email: string; workspace_index?: number }): Promise<AuthorizationTask[]> {
   const { data } = await apiClient.post<AuthorizationTask[]>('/admin/authorization-tasks', { account_ids: accountIDs, ...binding })
   return data
 }

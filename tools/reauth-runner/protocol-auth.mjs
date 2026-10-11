@@ -3,6 +3,7 @@ import { CookieJar } from 'tough-cookie'
 import { createCurlCffiFetch } from './curl-cffi-fetch.mjs'
 import { createSentinel } from './sentinel.mjs'
 import { browserHeaders } from './browser-profile.mjs'
+import { readConsentForm } from './consent-form.mjs'
 
 const origin = 'https://auth.openai.com'
 const redirectURI = 'http://localhost:1455/auth/callback'
@@ -120,7 +121,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         result.error.httpStatus = response.status
         throw Object.assign(new Error(result.error.message), { result })
       }
-      return { url, response, data }
+      return { url, response, data, text }
     }
     const follow = async target => {
       let url = new URL(target, origin)
@@ -235,6 +236,8 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
           }
         } catch { /* Cookie format is provider-owned. */ }
       }
+      const consentForm = readConsentForm(step.text || '', step.url.href)
+      if (consentForm) workspaces = consentForm.workspaces
       if (!workspaces.length) reject('WORKSPACE_LIST_UNAVAILABLE', 'The authorization session did not provide a usable workspace list', true)
       const expectedID = task.context.expectedAccountID
       const isPersonal = item => item.is_personal === true || item.type === 'personal' ||
@@ -249,7 +252,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         : `Workspace index ${workspaceIndex} exceeds the ${eligible.length} available workspaces`)
       selectedWorkspaceID = workspace.id
       const selected = await post('/api/accounts/workspace/select', { workspace_id: workspace.id }, step.url)
-      const target = nextURL(selected.data)
+      const target = selected.response.headers.get('location') || nextURL(selected.data)
       if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not return an authorization callback')
       step = await follow(target)
       if (!step.code) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not complete authorization after workspace selection')

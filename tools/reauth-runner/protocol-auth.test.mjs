@@ -89,10 +89,13 @@ function provider(options = {}) {
       if (options.codeRejected) return new Response('private token and email', { status: 400 })
       if (options.signupAfterCode) return json({ continue_url: '/about-you' })
       if (options.external) return json({ continue_url: 'https://elsewhere.example/private' })
+      if (options.consentHTML) return json({ continue_url: '/sign-in-with-chatgpt/codex/consent' })
       if (options.workspaces) return json({ continue_url: '/sign-in-with-chatgpt/codex/consent' }, { 'set-cookie': `oai-client-auth-session=${options.encodedCookie ? encodeURIComponent(JSON.stringify(jwt({ workspaces: options.workspaces }))) : options.firstSegmentCookie ? Buffer.from(JSON.stringify({ workspaces: options.workspaces })).toString('base64url') + '.signature' : jwt({ workspaces: options.workspaces })}; Secure; Path=${options.cookiePath || '/'}` })
       return json({ continue_url: `${callback}?code=oauth-code&state=${options.badState ? 'different' : auth.searchParams.get('state')}` })
     }
-    if (url.pathname === '/sign-in-with-chatgpt/codex/consent') return new Response('<html>Consent</html>')
+    if (url.pathname === '/sign-in-with-chatgpt/codex/consent') {
+      return new Response(options.consentHTML || '<html>Consent</html>')
+    }
     if (url.pathname === '/api/accounts/workspace/select') {
       assert.equal(JSON.parse(init.body).workspace_id, options.expectedWorkspace)
       return json({ continue_url: `${callback}?code=oauth-code&state=${auth.searchParams.get('state')}` })
@@ -410,4 +413,23 @@ test('reauthorization keeps the existing workspace ID when list order changes', 
 test('a token for a different workspace cannot replace the selected team identity', async () => {
   const mock = provider({ workspaces: [{ id: 'account-1' }], expectedWorkspace: 'account-1', accountID: 'personal-id' })
   assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).error.code, 'IDENTITY_MISMATCH')
+})
+
+const modernConsent = `<form action="/sign-in-with-chatgpt/codex/consent" method="post">
+<input type="hidden" name="csrf" value="test-csrf">
+<input type="radio" name="workspace_id" value="personal" id="personal"><label for="personal">Personal</label>
+<label>Team A<input type="radio" name="workspace_id" value="team-a"></label>
+<input type="radio" name="workspace_id" value="account-1" id="team-b"><label for="team-b">Team B</label>
+<button type="submit">Continue</button></form>`
+
+test('modern consent HTML without a legacy cookie supplies the configured team to workspace selection', async () => {
+  const mock = provider({ consentHTML: modernConsent, expectedWorkspace: 'account-1' })
+  assert.equal((await authorizeWithProtocol(makeTask({ workspaceIndex: 2 }), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
+  assert.equal(mock.requests.filter(r => r.url.pathname === '/api/accounts/workspace/select').length, 1)
+})
+
+test('an external consent form cannot receive the workspace or session credentials', async () => {
+  const mock = provider({ consentHTML: modernConsent.replace('action="/sign-in-with-chatgpt/codex/consent"', 'action="https://other.example/consent"') })
+  assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).error.code, 'WORKSPACE_LIST_UNAVAILABLE')
+  assert.equal(mock.requests.some(r => r.url.pathname === '/sign-in-with-chatgpt/codex/consent' && r.init.method === 'POST'), false)
 })

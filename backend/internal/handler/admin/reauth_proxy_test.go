@@ -49,3 +49,26 @@ func TestAuthorizationWorkspaceIndexValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestReauthWorkspaceSelection(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		extra    map[string]any
+		index    int
+		expected string
+		invalid  bool
+	}{
+		{"legacy identity", nil, 1, "old-workspace", false},
+		{"explicit second workspace", map[string]any{"one_click_auth_workspace_index": float64(2)}, 2, "", false},
+		{"explicit default", map[string]any{"one_click_auth_workspace_index": 1}, 1, "", false},
+		{"zero rejected", map[string]any{"one_click_auth_workspace_index": 0}, 0, "", true},
+		{"fraction rejected", map[string]any{"one_click_auth_workspace_index": 1.5}, 0, "", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			index, expected, err := reauthWorkspaceSelection(&service.Account{Extra: tc.extra, Credentials: map[string]any{"chatgpt_account_id": "old-workspace"}})
+			if (err != nil) != tc.invalid || index != tc.index || expected != tc.expected {
+				t.Fatalf("got index %d, expected %q, error %v", index, expected, err)
+			}
+		})
+	}
+}

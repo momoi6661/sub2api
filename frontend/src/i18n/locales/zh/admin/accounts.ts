@@ -172,6 +172,11 @@ export default {
         refreshSuccess: 'Ollama Cloud 用量已刷新',
         refreshFailed: '刷新 Ollama Cloud 用量失败',
         errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
+          WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+
           request_failed: '请求失败',
           empty_response: '响应为空',
           response_host_mismatch: '响应主机不符合安全边界',
@@ -396,6 +401,11 @@ export default {
         statuses: { queued: '排队中', running: '执行中', succeeded: '授权成功', ready: '凭据已获取', failed: '执行失败', cancelled: '已中断' },
         sources: { manual: '手动授权', batch: '批量授权', automatic: '失效自动授权', new_account: '新增账号授权' },
         errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
+          WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+
           PROXY_CONNECTION_FAILED: "代理连接失败或超时，请检查选定代理的地址和连通性。",
           PROXY_AUTH_FAILED: "代理认证失败，请检查代理用户名和密码。",
           MAILBOX_CONNECTION_FAILED: '无法登录或读取收件邮箱。检查主机、文件夹和邮箱密码；Gmail 请使用应用专用密码。此步骤失败时尚未进入发送验证码流程。',
@@ -591,6 +601,11 @@ export default {
         refreshSuccess: 'OpenCode Go 用量已刷新',
         refreshFailed: '刷新 OpenCode Go 用量失败',
         errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
+          WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+
           OPENCODE_GO_USAGE_REFRESH_RATE_LIMITED: '刷新过于频繁，请在 {retry_after_seconds} 秒后重试。',
           forbidden: '上游返回 403：可能是订阅缺失/失效，也可能是 WAF 或访问策略拦截，请结合网络路径与 HTTP 状态排查。'
         }
@@ -1485,6 +1500,11 @@ export default {
           failedToExchangeCode: 'OpenAI 授权码兑换失败',
           failedToValidateRT: '验证 Refresh Token 失败',
           errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
+          WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+
             OPENAI_OAUTH_PROXY_REQUIRED:
               '未设置代理，当前服务器无法直连 OpenAI，导致 OpenAI OAuth 请求失败。请先选择可访问 OpenAI 的代理后重试；如果授权码已失效，请重新生成授权链接。'
           },
@@ -1577,6 +1597,11 @@ export default {
           failedToValidateRT: '验证 Grok refresh token 失败',
           failedToConvertSSO: 'Grok SSO 转换失败',
           errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
+          WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+
             GROK_OAUTH_SESSION_NOT_FOUND:
               'Grok OAuth 会话不存在或已过期。请重新生成授权链接，并粘贴最新的回调链接。',
             GROK_OAUTH_INVALID_STATE:

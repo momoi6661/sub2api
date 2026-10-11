@@ -203,9 +203,10 @@ func (h *AccountHandler) executeQueuedAuthorization(parent context.Context, task
 
 func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 	var input struct {
-		AccountIDs []int64 `json:"account_ids" binding:"required,min=1,max=100"`
-		ProfileID  string  `json:"profile_id" binding:"max=128"`
-		LoginEmail string  `json:"login_email" binding:"max=254"`
+		AccountIDs     []int64 `json:"account_ids" binding:"required,min=1,max=100"`
+		ProfileID      string  `json:"profile_id" binding:"max=128"`
+		LoginEmail     string  `json:"login_email" binding:"max=254"`
+		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -227,7 +228,7 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 			enabled[p.ID] = p.Enabled
 		}
 	}
-	if input.ProfileID != "" || input.LoginEmail != "" {
+	if input.ProfileID != "" || input.LoginEmail != "" || input.WorkspaceIndex != nil {
 		input.LoginEmail = strings.TrimSpace(input.LoginEmail)
 		address, err := mail.ParseAddress(input.LoginEmail)
 		if len(input.AccountIDs) != 1 || !enabled[input.ProfileID] || err != nil || address.Address != input.LoginEmail {
@@ -256,6 +257,9 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 		}
 		if input.ProfileID != "" {
 			updates := map[string]any{"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail}
+			if input.WorkspaceIndex != nil {
+				updates["one_click_auth_workspace_index"] = *input.WorkspaceIndex
+			}
 			if account.Extra == nil {
 				account.Extra = make(map[string]any)
 			}

@@ -250,12 +250,9 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	task := service.ReauthRunnerTask{ResendAfterSeconds: profile.EmailResendSeconds, Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
 		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
-	workspaceIndex := 1
-	if value, exists := account.Extra["one_click_auth_workspace_index"]; exists {
-		encoded, err := json.Marshal(value)
-		if err != nil || json.Unmarshal(encoded, &workspaceIndex) != nil || workspaceIndex < 1 {
-			return nil, &service.ReauthExecutionError{Code: "INVALID_WORKSPACE_INDEX", Message: "Workspace index must be a positive integer"}
-		}
+	workspaceIndex, expectedWorkspaceID, err := reauthWorkspaceSelection(account)
+	if err != nil {
+		return nil, err
 	}
 	task.Context["workspaceIndex"] = workspaceIndex
 	task.OnProgress = func(stage string) { authProgress(ctx, stage) }
@@ -288,7 +285,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 		authProgress(ctx, "authorization_file")
 	} else {
 		task.Mode = "oauth_protocol"
-		task.Context["expectedAccountID"] = codexCredentialString(account.Credentials, "chatgpt_account_id")
+		task.Context["expectedAccountID"] = expectedWorkspaceID
 		authProgress(ctx, "protocol_authorization")
 	}
 	result, err := service.ExecuteReauthRunner(ctx, task)
@@ -366,4 +363,19 @@ func (h *AccountHandler) StopOneClickAuth() {
 		h.reauthWorker.Stop()
 	}
 	h.authTaskWG.Wait()
+}
+
+// An explicitly saved index is the administrator's selection. Legacy accounts
+// retain their original identity until an index is configured.
+func reauthWorkspaceSelection(account *service.Account) (int, string, error) {
+	value, explicit := account.Extra["one_click_auth_workspace_index"]
+	if !explicit {
+		return 1, codexCredentialString(account.Credentials, "chatgpt_account_id"), nil
+	}
+	index := 1
+	encoded, err := json.Marshal(value)
+	if err != nil || json.Unmarshal(encoded, &index) != nil || index < 1 {
+		return 0, "", &service.ReauthExecutionError{Code: "INVALID_WORKSPACE_INDEX", Message: "Workspace index must be a positive integer"}
+	}
+	return index, "", nil
 }

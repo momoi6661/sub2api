@@ -17,7 +17,11 @@ when no team is available, the personal list is eligible instead. Out-of-range
 indexes return `WORKSPACE_INDEX_OUT_OF_RANGE`. The selection is stored in account
 extra as `one_click_auth_workspace_index`, not in mailbox profiles.
 Issued tokens must match the selected workspace ID.
-Reauthorization with a known account ID selects that workspace exactly; missing
+The index is available in creation, account editing and reauthorization forms.
+An explicitly saved index also applies to existing accounts; legacy accounts
+without an index retain their known account ID. Workspace lists are read from
+the consent page's loader data or rendered controls, with legacy cookie support,
+then submitted through `/api/accounts/workspace/select`. Missing
 workspace lists and mismatched IDs stop with `WORKSPACE_LIST_UNAVAILABLE` and
 `WORKSPACE_ID_MISMATCH`. Password pages (including redirected
 pages) use `/api/accounts/passwordless/send-otp`, then mailbox code reading and

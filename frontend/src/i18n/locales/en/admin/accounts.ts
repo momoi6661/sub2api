@@ -209,6 +209,11 @@ export default {
         refreshSuccess: 'OpenCode Go usage refreshed',
         refreshFailed: 'Failed to refresh OpenCode Go usage',
         errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
+          WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+
           OPENCODE_GO_USAGE_REFRESH_RATE_LIMITED: 'Refresh is limited. Try again in {retry_after_seconds} seconds.',
           forbidden: 'Upstream returned 403: could be a missing/expired OpenCode Go subscription or a WAF/access-policy block; check the network path and HTTP status.'
         }
@@ -326,6 +331,11 @@ export default {
         refreshSuccess: 'Ollama Cloud usage refreshed',
         refreshFailed: 'Failed to refresh Ollama Cloud usage',
         errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
+          WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+
           request_failed: 'Request failed',
           empty_response: 'Empty response',
           response_host_mismatch: 'Unexpected response host',
@@ -597,6 +607,11 @@ export default {
         statuses: { queued: 'Queued', running: 'Running', succeeded: 'Authorized', ready: 'Credentials obtained', failed: 'Failed', cancelled: 'Cancelled' },
         sources: { manual: 'Manual', batch: 'Batch', automatic: 'Automatic recovery', new_account: 'New account' },
         errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
+          WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+
           PROXY_CONNECTION_FAILED: "Connection through the selected proxy failed or timed out. Check its address and connectivity.",
           PROXY_AUTH_FAILED: "Proxy authentication failed. Check the proxy username and password.",
           MAILBOX_CONNECTION_FAILED: 'Mailbox login or reading failed. Check the host, folder and password; Gmail requires an app password. Code delivery has not started if this initial step fails.',
@@ -1389,6 +1404,11 @@ export default {
           failedToExchangeCode: 'Failed to exchange OpenAI auth code',
           failedToValidateRT: 'Failed to validate refresh token',
           errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
+          WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+
             OPENAI_OAUTH_PROXY_REQUIRED:
               'No proxy is configured and this server could not reach OpenAI directly, so the OpenAI OAuth request failed. Select a proxy that can access OpenAI and retry; if the authorization code has expired, regenerate the authorization URL.'
           },
@@ -1482,6 +1502,11 @@ export default {
           failedToValidateRT: 'Failed to validate Grok refresh token',
           failedToConvertSSO: 'Failed to convert Grok SSO cookie',
           errors: {
+          WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
+          WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
+          WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+
             GROK_OAUTH_SESSION_NOT_FOUND:
               'Grok OAuth session was not found or has expired. Generate a new auth URL and paste the newest callback URL.',
             GROK_OAUTH_INVALID_STATE:

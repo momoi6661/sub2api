@@ -209,7 +209,7 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 		CustomInput    *string `json:"custom_input" binding:"omitempty,max=16384"`
 		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32*1024)
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c, "Select between 1 and 100 accounts")
 		return

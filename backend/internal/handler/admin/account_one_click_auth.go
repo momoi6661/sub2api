@@ -131,7 +131,7 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 		ProxyID        *int64  `json:"proxy_id"`
 		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
 	}
-	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32*1024)
 	if err := c.ShouldBindJSON(&input); err != nil {
 		response.BadRequest(c, "Select an authorization profile and enter a login email")
 		return

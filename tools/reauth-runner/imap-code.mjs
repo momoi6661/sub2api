@@ -11,15 +11,24 @@ export function matchMailboxMessage(parsed, internalDate, task) {
   // iCloud Hide My Email can forward a message to Gmail while rewriting the
   // visible recipient headers. Accept either the login alias or the mailbox
   // that actually receives the forwarded message.
-  const recipients = new Set([
-    task.context.loginEmail,
-    task.context.mailboxAddress,
-  ].filter(value => typeof value === 'string' && value.trim()).map(value => value.trim().toLowerCase()))
-  const delivered = ['delivered-to', 'x-original-to', 'envelope-to'].flatMap(key => {
+  const login = task.context.loginEmail?.trim().toLowerCase()
+  const mailbox = task.context.mailboxAddress?.trim().toLowerCase()
+  const headerAddresses = key => {
     const raw = parsed.headers.get(key)
-    return typeof raw === 'string' ? raw.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+/gi) || [] : addresses(raw)
-  }).map(value => value.toLowerCase())
-  if (![...addresses(parsed.to), ...addresses(parsed.cc), ...delivered].some(value => recipients.has(value))) return null
+    return (Array.isArray(raw) ? raw : [raw]).flatMap(value => typeof value === 'string'
+      ? value.match(/[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9.-]+/gi) || [] : addresses(value))
+      .map(value => value.toLowerCase())
+  }
+  const original = [...addresses(parsed.to), ...addresses(parsed.cc),
+    ...headerAddresses('x-original-to'), ...headerAddresses('envelope-to')]
+  const delivered = headerAddresses('delivered-to')
+  const all = [...original, ...delivered]
+  // A shared inbox delivery address must not override another explicit login
+  // recipient. Fall back to the inbox only when original recipients are absent
+  // or were themselves rewritten to that inbox by the forwarding provider.
+  if (!login || !all.includes(login)) {
+    if (!mailbox || !all.includes(mailbox) || original.some(value => value !== mailbox)) return null
+  }
   if (!(internalDate instanceof Date) || !Number.isFinite(internalDate.getTime()) || !Number.isFinite(deliveryStart(task)) || internalDate.getTime() < deliveryStart(task)) return null
   if (task.mailbox.senderFilter && !addresses(parsed.from).includes(task.mailbox.senderFilter.toLowerCase())) return null
   const body = `${parsed.subject || ''}\n${parsed.text || ''}`.slice(0, 100000)

@@ -11,7 +11,11 @@ Only existing accounts are authorized. `/about-you`, signup and profile creation
 return `ACCOUNT_NOT_REGISTERED` without submitting registration data. CAPTCHA and
 unsatisfied Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`,
 preserving the HTTP status when available. Phone verification, passkeys, MFA and
-ambiguous workspace selection return `MANUAL_REQUIRED`. Password pages (including redirected
+additional provider verification return `MANUAL_REQUIRED`. New accounts prefer a
+personal workspace (flag or title/name), otherwise the first offered workspace.
+Reauthorization with a known account ID selects that workspace exactly; missing
+workspace lists and mismatched IDs stop with `WORKSPACE_LIST_UNAVAILABLE` and
+`WORKSPACE_ID_MISMATCH`. Password pages (including redirected
 pages) use `/api/accounts/passwordless/send-otp`, then mailbox code reading and
 `/api/accounts/email-otp/validate`. A return to the password page after sending
 returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted.

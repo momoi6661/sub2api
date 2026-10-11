@@ -89,7 +89,7 @@ function provider(options = {}) {
       if (options.codeRejected) return new Response('private token and email', { status: 400 })
       if (options.signupAfterCode) return json({ continue_url: '/about-you' })
       if (options.external) return json({ continue_url: 'https://elsewhere.example/private' })
-      if (options.workspaces) return json({ continue_url: '/sign-in-with-chatgpt/codex/consent' }, { 'set-cookie': `oai-client-auth-session=${jwt({ workspaces: options.workspaces })}; Secure; Path=/` })
+      if (options.workspaces) return json({ continue_url: '/sign-in-with-chatgpt/codex/consent' }, { 'set-cookie': `oai-client-auth-session=${options.encodedCookie ? encodeURIComponent(JSON.stringify(jwt({ workspaces: options.workspaces }))) : options.firstSegmentCookie ? Buffer.from(JSON.stringify({ workspaces: options.workspaces })).toString('base64url') + '.signature' : jwt({ workspaces: options.workspaces })}; Secure; Path=${options.cookiePath || '/'}` })
       return json({ continue_url: `${callback}?code=oauth-code&state=${options.badState ? 'different' : auth.searchParams.get('state')}` })
     }
     if (url.pathname === '/sign-in-with-chatgpt/codex/consent') return new Response('<html>Consent</html>')
@@ -284,10 +284,25 @@ test('selects the existing account workspace rather than another workspace', asy
   assert.equal((await authorizeWithProtocol(makeTask({ expectedAccountID: 'account-1' }), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
 })
 
-test('ambiguous workspace selection stops without choosing an identity', async () => {
-  const mock = provider({ workspaces: [{ id: 'other' }, { id: 'account-1' }] })
-  const result = await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)
-  assert.equal(result.error.code, 'MANUAL_REQUIRED')
+test('new accounts use the first offered workspace when none is marked personal', async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1' }, { id: 'other' }], expectedWorkspace: 'account-1' })
+  assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
+})
+
+for (const personal of [{ is_personal: true }, { title: 'Personal' }, { name: '个人' }]) test(`prefers the personal workspace: ${JSON.stringify(personal)}`, async () => {
+  const mock = provider({ workspaces: [{ id: 'team' }, { id: 'account-1', ...personal }], expectedWorkspace: 'account-1' })
+  assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
+})
+
+for (const cookieOptions of [{ cookiePath: '/sign-in-with-chatgpt' }, { firstSegmentCookie: true }, { encodedCookie: true }]) test(`reads consent-session cookie variants: ${JSON.stringify(cookieOptions)}`, async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1' }], expectedWorkspace: 'account-1', ...cookieOptions })
+  assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
+})
+
+for (const options of [{ workspaces: [] }, { workspaces: [null, {}, { id: '' }] }, { workspaces: [{ id: 'other' }], missingExpected: true }]) test(`unavailable workspace gives a precise error without selecting another account: ${JSON.stringify(options)}`, async () => {
+  const mock = provider(options)
+  const result = await authorizeWithProtocol(makeTask(options.missingExpected ? { expectedAccountID: 'account-1' } : {}), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.error.code, options.missingExpected ? 'WORKSPACE_ID_MISMATCH' : 'WORKSPACE_LIST_UNAVAILABLE')
   assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
 })
 

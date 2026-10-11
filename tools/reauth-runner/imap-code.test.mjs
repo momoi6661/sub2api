@@ -38,3 +38,26 @@ test('invalid delivery or task timestamps never yield a code', async () => {
   assert.equal(matchMailboxMessage(parsed, new Date('invalid'), task), null)
   assert.equal(matchMailboxMessage(parsed, new Date(), { ...task, context: { ...task.context, since: 'invalid' } }), null)
 })
+
+
+test('iCloud Hide My Email forwarding with rewritten sender and HTML body matches the login alias', async () => {
+  const raw = email({ to: 'login-alias@icloud.com', from: 'noreply_at_tm1_openai_com_forwarding_id@icloud.com', delivered: 'shared@gmail.com' })
+    .replace('Subject: Login verification', 'Subject: Your temporary ChatGPT login code')
+  const forwardedTask = { context: { ...task.context, loginEmail: 'login-alias@icloud.com', mailboxAddress: 'shared@gmail.com' }, mailbox: { ...task.mailbox, senderFilter: '' } }
+  assert.equal(matchMailboxMessage(await simpleParser(raw), new Date('2026-10-10T12:00:01Z'), forwardedTask), '123456')
+})
+
+test('shared Gmail delivery never accepts a different explicit hidden-email recipient', async () => {
+  const forwardedTask = { context: { ...task.context, loginEmail: 'login-alias@icloud.com', mailboxAddress: 'shared@gmail.com' }, mailbox: { ...task.mailbox, senderFilter: '' } }
+  const parsed = await simpleParser(email({ to: 'different-alias@icloud.com', delivered: 'shared@gmail.com' }))
+  assert.equal(matchMailboxMessage(parsed, new Date('2026-10-10T12:00:01Z'), forwardedTask), null)
+  const rewritten = await simpleParser(email({ to: 'shared@gmail.com', delivered: 'shared@gmail.com' }))
+  rewritten.headers.set('x-original-to', 'different-alias@icloud.com')
+  assert.equal(matchMailboxMessage(rewritten, new Date('2026-10-10T12:00:01Z'), forwardedTask), null)
+})
+
+test('repeated delivery headers still match the requested login recipient', async () => {
+  const parsed = await simpleParser(email({ to: 'shared@example.com' }))
+  parsed.headers.set('delivered-to', ['relay@example.com', 'owner@example.com'])
+  assert.equal(matchMailboxMessage(parsed, new Date('2026-10-10T12:00:01Z'), task), '123456')
+})

@@ -217,19 +217,29 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       report('consent')
       phase = 'CONSENT_FAILED'
       if (!/\/(consent|workspace)$/.test(step.url.pathname)) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider returned an unsupported authorization step')
-      const cookie = (await jar.getCookies(origin)).find(item => item.key === 'oai-client-auth-session')?.value || ''
-      const parts = cookie.split('.')
+      // Read at the consent URL: auth-session cookies may be scoped below /.
+      const cookies = await jar.getCookies(step.url.href)
+      const cookie = cookies.find(item => item.key === 'oai-client-auth-session')?.value || ''
+      let decoded = cookie
+      try { decoded = decodeURIComponent(cookie) } catch { /* Preserve an unescaped cookie. */ }
+      const parts = decoded.replace(/^"|"$/g, '').split('.')
       let workspaces = []
       for (const part of [parts[1], parts[0]]) {
         try {
           const value = JSON.parse(Buffer.from(part || '', 'base64url').toString())
-          if (Array.isArray(value.workspaces) && value.workspaces.length) { workspaces = value.workspaces; break }
+          if (Array.isArray(value.workspaces) && value.workspaces.length) {
+            workspaces = value.workspaces.filter(item => item && typeof item.id === 'string' && item.id.trim())
+            if (workspaces.length) break
+          }
         } catch { /* Cookie format is provider-owned. */ }
       }
+      if (!workspaces.length) reject('WORKSPACE_LIST_UNAVAILABLE', 'The authorization session did not provide a usable workspace list', true)
       const expectedID = task.context.expectedAccountID
+      // Match an existing account exactly. For a new account, mirror the
+      // reference flow: prefer personal, otherwise use the first offered ID.
       const workspace = expectedID ? workspaces.find(item => item.id === expectedID)
-        : workspaces.length === 1 ? workspaces[0] : workspaces.find(item => item.is_personal === true)
-      if (!workspace?.id) reject('MANUAL_REQUIRED', 'Workspace selection requires manual authorization')
+        : workspaces.find(item => item.is_personal === true || /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))) || workspaces[0]
+      if (!workspace) reject('WORKSPACE_ID_MISMATCH', 'The existing account workspace is not available in this authorization session')
       const selected = await post('/api/accounts/workspace/select', { workspace_id: workspace.id }, step.url)
       const target = nextURL(selected.data)
       if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not return an authorization callback')

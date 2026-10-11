@@ -11,8 +11,9 @@
       <p v-else-if="!loading && !profiles.length" class="input-hint">{{ t('admin.accounts.authProfiles.empty') }}</p>
     </div>
     <div>
-      <label for="new-account-auth-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
-      <input id="new-account-auth-email" v-model="loginEmail" class="input" type="email" required maxlength="254" autocomplete="email" :disabled="busy" placeholder="name@example.com" />
+      <label for="new-account-auth-email" class="input-label">{{ t(customMode ? 'admin.accounts.authProfiles.customInput' : 'admin.accounts.authProfiles.loginEmail') }}</label>
+      <textarea v-if="customMode" id="new-account-auth-input" v-model="customInput" class="input min-h-24 font-mono" maxlength="16384" :disabled="busy" />
+      <input v-else id="new-account-auth-email" v-model="loginEmail" class="input" type="email" required maxlength="254" autocomplete="email" :disabled="busy" placeholder="name@example.com" />
     </div>
     <div>
       <label for="new-account-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
@@ -26,7 +27,7 @@
       <p>{{ error }}</p>
       <p v-if="errorCode" class="mt-1">{{ errorCode }} · {{ t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable') }}</p>
     </div>
-    <button type="submit" class="btn btn-primary w-full sm:w-auto" :disabled="busy || loading || !selectedEnabled || !loginEmail.trim()">
+    <button type="submit" class="btn btn-primary w-full sm:w-auto" :disabled="busy || loading || !selectedEnabled || (!customMode && !loginEmail.trim())">
       <Icon v-if="busy" name="refresh" size="md" class="mr-2 animate-spin" />
       {{ t(busy ? 'admin.accounts.oauth.verifying' : accountID ? 'admin.accounts.authorizationTasks.submit' : authorization ? 'common.create' : 'admin.accounts.oneClickAuth.authorizeAndCreate') }}
     </button>
@@ -44,11 +45,13 @@ import OneClickAuthProgress from './OneClickAuthProgress.vue'
 import { authorizeNewAccount, listReauthProfiles, submitAuthorizationTasks, type AuthorizationTask, type AuthorizationStage, type NewAccountAuthorization, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { extractApiErrorCode, extractApiErrorMessage, extractApiErrorMetadata } from '@/utils/apiError'
 
-const props = withDefaults(defineProps<{ proxyID?: number | null; submitting?: boolean; accountID?: number; initialProfileID?: string; initialLoginEmail?: string; initialWorkspaceIndex?: number }>(), { proxyID: null, submitting: false, initialProfileID: '', initialLoginEmail: '', initialWorkspaceIndex: 1 })
-const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string, workspaceIndex: number]; submitted: [task: AuthorizationTask] }>()
+const props = withDefaults(defineProps<{ proxyID?: number | null; submitting?: boolean; accountID?: number; initialProfileID?: string; initialLoginEmail?: string; initialCustomInput?: string; initialWorkspaceIndex?: number }>(), { proxyID: null, submitting: false, initialProfileID: '', initialLoginEmail: '', initialCustomInput: '', initialWorkspaceIndex: 1 })
+const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string, workspaceIndex: number, customInput?: string]; submitted: [task: AuthorizationTask] }>()
 const { t } = useI18n()
 const profiles = ref<ReauthProfile[]>([])
 const profileID = ref(props.initialProfileID), loginEmail = ref(props.initialLoginEmail)
+const customInput = ref(props.initialCustomInput)
+const customMode = computed(() => profiles.value.find(p => p.id === profileID.value)?.mailbox_mode === 'api')
 const workspaceIndex = ref(props.initialWorkspaceIndex)
 const loading = ref(false), authorizing = ref(false), showEditor = ref(false)
 const loadError = ref(''), error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
@@ -60,7 +63,7 @@ const selectedEnabled = computed(() => profiles.value.some(p => p.id === profile
 let controller: AbortController | null = null
 let disposed = false
 
-watch([profileID, loginEmail, workspaceIndex, () => props.proxyID], () => {
+watch([profileID, loginEmail, customInput, workspaceIndex, () => props.proxyID], () => {
   controller?.abort()
   authorization.value = null
   error.value = ''; errorCode.value = ''
@@ -81,29 +84,29 @@ async function profileCreated(profile: ReauthProfile) {
   profileID.value = profile.id
 }
 async function authorize() {
-  if (busy.value || !selectedEnabled.value || !loginEmail.value.trim()) return
-  const selectedProfile = profileID.value, email = loginEmail.value.trim()
+  if (busy.value || !selectedEnabled.value || (!customMode.value && !loginEmail.value.trim())) return
+  const selectedProfile = profileID.value, email = customMode.value ? '' : loginEmail.value.trim()
   const taskController = new AbortController()
   controller = taskController
   taskStartedAt.value = Date.now(); taskFinishedAt.value = undefined; taskStage.value = 'preparing'
   authorizing.value = true; error.value = ''; errorCode.value = ''
   try {
     if (props.accountID) {
-      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email, workspace_index: workspaceIndex.value })
+      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email, workspace_index: workspaceIndex.value, ...(customMode.value ? { custom_input: customInput.value } : {}) })
       if (!disposed) emit('submitted', task)
       return
     }
     if (!authorization.value) {
       const result = await authorizeNewAccount(selectedProfile, email, props.proxyID, taskController.signal, progress => {
         if (!disposed && !taskController.signal.aborted) taskStage.value = progress.stage
-      }, workspaceIndex.value)
+      }, workspaceIndex.value, customMode.value ? customInput.value : undefined)
       if (disposed || taskController.signal.aborted) return
       authorization.value = result
     }
     taskStage.value = 'verifying'
     if (!disposed && !taskController.signal.aborted) {
       // Retain the result if creation fails, so retrying does not repeat OAuth.
-      emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email, workspaceIndex.value)
+      emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email, workspaceIndex.value, customMode.value ? customInput.value : undefined)
     }
   } catch (e) {
     if (!disposed && !taskController.signal.aborted) {

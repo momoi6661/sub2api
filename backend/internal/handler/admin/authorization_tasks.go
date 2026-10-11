@@ -206,6 +206,7 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 		AccountIDs     []int64 `json:"account_ids" binding:"required,min=1,max=100"`
 		ProfileID      string  `json:"profile_id" binding:"max=128"`
 		LoginEmail     string  `json:"login_email" binding:"max=254"`
+		CustomInput    *string `json:"custom_input" binding:"omitempty,max=16384"`
 		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
@@ -217,6 +218,7 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 	seen := make(map[int64]bool)
 	names := make(map[string]string)
 	enabled := make(map[string]bool)
+	custom := make(map[string]bool)
 	if h.reauthSettings != nil {
 		profiles, err := h.reauthSettings.ListReauthProfiles(c.Request.Context())
 		if err != nil {
@@ -226,12 +228,13 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 		for _, p := range profiles {
 			names[p.ID] = p.Name
 			enabled[p.ID] = p.Enabled
+			custom[p.ID] = p.MailboxMode == "api"
 		}
 	}
 	if input.ProfileID != "" || input.LoginEmail != "" || input.WorkspaceIndex != nil {
 		input.LoginEmail = strings.TrimSpace(input.LoginEmail)
 		address, err := mail.ParseAddress(input.LoginEmail)
-		if len(input.AccountIDs) != 1 || !enabled[input.ProfileID] || err != nil || address.Address != input.LoginEmail {
+		if len(input.AccountIDs) != 1 || !enabled[input.ProfileID] || (!custom[input.ProfileID] && (err != nil || address.Address != input.LoginEmail)) {
 			response.BadRequest(c, "Choose an enabled profile and valid login email for one account")
 			return
 		}
@@ -257,6 +260,12 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 		}
 		if input.ProfileID != "" {
 			updates := map[string]any{"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail}
+			if custom[input.ProfileID] {
+				delete(updates, "one_click_auth_login_email")
+				if input.CustomInput != nil {
+					updates["one_click_auth_custom_input"] = *input.CustomInput
+				}
+			}
 			if input.WorkspaceIndex != nil {
 				updates["one_click_auth_workspace_index"] = *input.WorkspaceIndex
 			}

@@ -6055,7 +6055,7 @@ const formatDateTimeLocal = formatDateTimeLocalInput
 const parseDateTimeLocal = parseDateTimeLocalInput
 
 // Create account and handle success/failure
-const handleNewAccountAuthorization = async (payload: NewAccountAuthorization, profileID: string, loginEmail: string, workspaceIndex: number) => {
+const handleNewAccountAuthorization = async (payload: NewAccountAuthorization, profileID: string, loginEmail: string, workspaceIndex: number, customInput?: string) => {
   if (submitting.value || !props.show || form.platform !== 'openai') return
   submitting.value = true
   try {
@@ -6067,6 +6067,7 @@ const handleNewAccountAuthorization = async (payload: NewAccountAuthorization, p
       ...(payload.extra || {}),
       one_click_auth_profile_id: profileID,
       one_click_auth_login_email: loginEmail,
+      ...(customInput !== undefined ? { one_click_auth_custom_input: customInput } : {}),
       one_click_auth_workspace_index: workspaceIndex,
       one_click_auth_enabled: false
     }))

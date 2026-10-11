@@ -123,3 +123,9 @@ docker compose -f docker-compose.dev.yml -f docker-compose.reauth.yml up -d --bu
 Rebuild both the panel and runner when upgrading from the browser runner: code
 profiles now send `mode=oauth_protocol` and receive `auth_file`, while direct
 file scripts retain `mode=protocol`. Old browser history remains readable.
+
+Custom profiles only define code and its result type. When applying a profile,
+enter optional free-form text in the custom input field. Scripts receive that
+exact text as `input`; parse it explicitly, for example `JSON.parse(input).param`.
+No wrapping or JSON conversion is performed. Code mode keeps the account login
+identity; file mode may create a new account from the returned verified file.

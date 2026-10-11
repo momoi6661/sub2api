@@ -17,12 +17,6 @@ try {
   // No console output may become a credential-bearing process log.
   console.log = console.error = console.warn = () => {}
   let customInput = task.input ?? ''
-  if (typeof task.input === 'string' && task.input.trim()) {
-    try {
-      const parsed = JSON.parse(task.input)
-      customInput = parsed
-    } catch { /* Raw text is passed through unchanged. */ }
-  }
   const value = await new AsyncFunction('context', 'input', task.script)(task.context, customInput)
   if (value?.type === 'error' && typeof value.error?.code === 'string' && typeof value.error?.message === 'string') {
     result = failure(value.error.code, value.error.message, value.error.retryable)

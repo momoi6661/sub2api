@@ -1710,8 +1710,9 @@
           <ReauthProfileSelect id="one-click-profile" v-model="oneClickAuthProfile" :profiles="authProfiles" :disabled="authProfilesLoading" />
           <div class="flex gap-2"><button type="button" class="btn btn-secondary" @click="showAuthProfileEditor = true">{{ t('admin.accounts.authProfiles.create') }}</button><button type="button" class="btn btn-secondary" :disabled="authProfilesLoading" @click="loadAuthProfiles">{{ t('common.refresh') }}</button></div>
           <p v-if="authProfilesError" role="alert" class="text-sm text-red-600">{{ authProfilesError }}</p>
-          <label for="one-click-login-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
-          <input id="one-click-login-email" v-model="oneClickLoginEmail" type="email" class="input" />
+          <label for="one-click-login-email" class="input-label">{{ t(oneClickCustomMode ? 'admin.accounts.authProfiles.customInput' : 'admin.accounts.authProfiles.loginEmail') }}</label>
+          <textarea v-if="oneClickCustomMode" v-model="oneClickCustomInput" class="input min-h-24 font-mono" maxlength="16384" />
+          <input v-else id="one-click-login-email" v-model="oneClickLoginEmail" type="email" class="input" />
           <label for="one-click-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
           <input id="one-click-workspace-index" v-model.number="oneClickWorkspaceIndex" type="number" min="1" step="1" required class="input" />
           <p class="input-hint">{{ t('admin.accounts.oneClickAuth.workspaceIndexHint') }}</p>
@@ -3708,6 +3709,8 @@ const autoPauseOnExpired = ref(false)
 const oneClickAuthEnabled = ref(false)
 const oneClickAuthProfile = ref('')
 const oneClickLoginEmail = ref('')
+const oneClickCustomInput = ref('')
+const oneClickCustomMode = computed(() => authProfiles.value.find(p => p.id === oneClickAuthProfile.value)?.mailbox_mode === 'api')
 const oneClickWorkspaceIndex = ref(1)
 const authProfiles = ref<ReauthProfile[]>([])
 const authProfilesLoading = ref(false)
@@ -4260,6 +4263,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	const extra = newAccount.extra as Record<string, unknown> | undefined
 	oneClickAuthEnabled.value = extra?.one_click_auth_enabled === true
 	oneClickAuthProfile.value = typeof extra?.one_click_auth_profile_id === 'string' ? extra.one_click_auth_profile_id : ''
+  oneClickCustomInput.value = String(extra?.one_click_auth_custom_input ?? '')
   oneClickWorkspaceIndex.value = Number(extra?.one_click_auth_workspace_index || 1)
   oneClickLoginEmail.value = typeof extra?.one_click_auth_login_email === 'string' ? extra.one_click_auth_login_email : (typeof credentials?.email === 'string' ? credentials.email : '')
 	mixedScheduling.value = extra?.mixed_scheduling === true
@@ -5970,12 +5974,13 @@ const handleSubmit = async () => {
     if (props.account.platform === 'openai' && props.account.type === 'oauth' && !isSparkShadow.value) {
       const currentExtra = (updatePayload.extra as Record<string, unknown>) || (props.account.extra as Record<string, unknown>) || {}
       const newExtra = { ...currentExtra }
-      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim() || newExtra.one_click_auth_workspace_index !== oneClickWorkspaceIndex.value) {
+      if (newExtra.one_click_auth_enabled !== oneClickAuthEnabled.value || newExtra.one_click_auth_profile_id !== oneClickAuthProfile.value || newExtra.one_click_auth_login_email !== oneClickLoginEmail.value.trim() || newExtra.one_click_auth_workspace_index !== oneClickWorkspaceIndex.value || newExtra.one_click_auth_custom_input !== oneClickCustomInput.value) {
         newExtra.one_click_auth_auto_attempt = ''
       }
       newExtra.one_click_auth_enabled = oneClickAuthEnabled.value
       newExtra.one_click_auth_profile_id = oneClickAuthProfile.value
       newExtra.one_click_auth_login_email = oneClickLoginEmail.value.trim()
+      newExtra.one_click_auth_custom_input = oneClickCustomInput.value
       newExtra.one_click_auth_workspace_index = oneClickWorkspaceIndex.value
       delete newExtra.one_click_auth_profile
       updatePayload.extra = newExtra

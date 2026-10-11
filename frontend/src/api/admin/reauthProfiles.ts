@@ -116,7 +116,7 @@ export interface AuthorizationTask {
   events: { stage: AuthorizationStage; at: string }[]; error_code: string; error_message: string
 }
 export interface AuthorizationTaskPage { items: AuthorizationTask[]; total: number; active_count: number }
-export async function submitAuthorizationTasks(accountIDs: number[], binding?: { profile_id: string; login_email: string; workspace_index?: number }): Promise<AuthorizationTask[]> {
+export async function submitAuthorizationTasks(accountIDs: number[], binding?: { profile_id: string; login_email: string; workspace_index?: number; custom_input?: string }): Promise<AuthorizationTask[]> {
   const { data } = await apiClient.post<AuthorizationTask[]>('/admin/authorization-tasks', { account_ids: accountIDs, ...binding })
   return data
 }
@@ -143,10 +143,10 @@ export interface NewAccountAuthorization {
 }
 
 export async function authorizeNewAccount(
-  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal, onProgress?: ProgressCallback, workspaceIndex = 1
+  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal, onProgress?: ProgressCallback, workspaceIndex = 1, customInput?: string
 ): Promise<NewAccountAuthorization> {
   const { data } = await apiClient.post<NewAccountAuthorization>('/admin/accounts/one-click-auth', {
-    profile_id: profileID, login_email: loginEmail, proxy_id: proxyID, workspace_index: workspaceIndex
+    profile_id: profileID, login_email: loginEmail, proxy_id: proxyID, workspace_index: workspaceIndex, custom_input: customInput
   }, authorizationRequestConfig(onProgress, signal))
   return data
 }

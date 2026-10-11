@@ -31,7 +31,8 @@ const server = http.createServer(async (request, response) => {
     let body = ''
     for await (const chunk of request) { body += chunk; if (body.length > 65536) throw new Error('size') }
     const task = JSON.parse(body)
-    if (typeof task.script !== 'string' || task.script.length > 16384 || !['code', 'auth_file'].includes(task.resultType) || !task.context?.loginEmail) throw new Error('task')
+    if (typeof task.script !== 'string' || task.script.length > 16384 || !['code', 'auth_file'].includes(task.resultType) || !task.context || (task.mode === 'oauth_protocol' && !task.context.loginEmail)) throw new Error('task')
+    if (task.input !== undefined && (typeof task.input !== 'string' || task.input.length > 16384)) throw new Error('input')
     if (task.resendAfterSeconds !== undefined && (!Number.isInteger(task.resendAfterSeconds) || task.resendAfterSeconds < 10 || task.resendAfterSeconds > 90)) throw new Error('resend')
     if (task.operation) throw new Error('operation')
     if (task.mailbox) {

@@ -39,7 +39,7 @@ func normalizeReauthAuthFile(content string, existing *service.Account) (*ApplyO
 		expectedEmail = codexCredentialString(existing.Credentials, "email")
 	}
 	expectedID := codexCredentialString(existing.Credentials, "chatgpt_account_id")
-	if expectedEmail == "" && expectedID == "" {
+	if existing.ID != 0 && expectedEmail == "" && expectedID == "" {
 		return nil, errors.New("configure account login email before using an authorization file")
 	}
 	if expectedEmail != "" && !strings.EqualFold(expectedEmail, item.Email) {

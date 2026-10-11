@@ -4,12 +4,12 @@
       <p class="input-hint">{{ t('admin.accounts.authProfiles.pending') }}</p>
       <div><label for="auth-profile-name" class="input-label">{{ t('admin.accounts.authProfiles.name') }}</label><input id="auth-profile-name" v-model="form.name" class="input" required maxlength="120" /></div>
       <label class="flex items-center gap-2"><input v-model="form.enabled" type="checkbox" />{{ t('admin.accounts.authProfiles.enabled') }}</label>
-      <div v-if="form.mailbox_mode !== 'api'"><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" required /></div>
-      <p v-if="form.mailbox_mode === 'imap' || form.api_result_type !== 'auth_file'" class="input-hint">{{ t('admin.accounts.authProfiles.mailboxHint') }}</p>
       <div>
         <label for="auth-profile-mode" class="input-label">{{ t('admin.accounts.authProfiles.mode') }}</label>
         <Select id="auth-profile-mode" v-model="form.mailbox_mode" :options="mailboxModeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.mode')" />
       </div>
+      <div v-if="form.mailbox_mode !== 'api'"><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" required /></div>
+      <p v-if="form.mailbox_mode === 'imap'" class="input-hint">{{ t('admin.accounts.authProfiles.mailboxHint') }}</p>
       <div v-if="form.mailbox_mode === 'imap'" class="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div><label for="auth-profile-host" class="input-label">{{ t('admin.accounts.authProfiles.host') }}</label><input id="auth-profile-host" v-model="form.imap_host" class="input" required /></div>
         <div><label for="auth-profile-port" class="input-label">{{ t('admin.accounts.authProfiles.port') }}</label><input id="auth-profile-port" v-model.number="form.imap_port" class="input" type="number" min="1" max="65535" required /></div>
@@ -18,15 +18,13 @@
         <label for="auth-profile-result" class="input-label">{{ t('admin.accounts.authProfiles.resultType') }}</label>
         <Select id="auth-profile-result" v-model="form.api_result_type" :options="resultTypeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.resultType')" />
         <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
-        <label for="auth-profile-custom-input" class="input-label">{{ t('admin.accounts.authProfiles.customInput') }}</label>
-        <textarea id="auth-profile-custom-input" v-model="form.custom_input" class="input min-h-24 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />
-        <p class="input-hint">{{ t('admin.accounts.authProfiles.customInputDescription') }}</p>
         <label for="auth-profile-script" class="input-label">{{ t('admin.accounts.authProfiles.script') }}</label>
         <textarea id="auth-profile-script" v-model="form.code_script" class="input min-h-48 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="scriptExample" />
         <p class="input-hint">{{ t(form.has_code_script ? 'admin.accounts.authProfiles.scriptKeep' : 'admin.accounts.authProfiles.scriptHint') }}</p>
         <ReauthScriptRules />
-        <label for="auth-profile-test-email" class="input-label">{{ t('admin.accounts.authProfiles.testEmail') }}</label>
-        <input id="auth-profile-test-email" v-model="testEmail" type="email" class="input" />
+        <label for="auth-profile-test-input" class="input-label">{{ t('admin.accounts.authProfiles.customInput') }}</label>
+        <textarea id="auth-profile-test-input" v-model="form.custom_input" class="input font-mono" maxlength="16384" />
+        <p class="input-hint">{{ t('admin.accounts.authProfiles.customInputDescription') }}</p>
         <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
         <p v-if="testResult" role="status" class="text-sm text-green-600">{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
       </div>
@@ -86,11 +84,12 @@ const error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const testEmail = ref(''), testResult = ref(''), testing = ref(false)
 let testAbort: AbortController | null = null
 const scriptExample = computed(() => `// context: loginEmail, since
-// input.param is your custom value (JSON object/string/number)
+// input is the raw text entered when applying this profile.
+// Parse it yourself, for example: const params = JSON.parse(input);
 // Set your endpoint and request options in this code.
 // Filter messages by recipient and date in your request.
 const response = await fetch('https://your-mail-service.example/messages', {
-  headers: { Authorization: 'Bearer ' + context.secret },
+  headers: { Authorization: 'Bearer ' + JSON.parse(input).param },
   credentials: 'omit'
 });
 if (!response.ok) throw new Error('Mailbox request failed');
@@ -119,7 +118,7 @@ async function save() {
   if (saving.value) return
   saving.value = true
   error.value = ''
-  try { emit('saved', await saveReauthProfile({ ...form.value, imap_username: form.value.mailbox_address.trim() })); form.value.secret = ''; form.value.code_script = ''; emit('close') }
+  try { emit('saved', await saveReauthProfile({ ...form.value, custom_input: '', imap_username: form.value.mailbox_address.trim() })); form.value.secret = ''; form.value.code_script = ''; emit('close') }
   catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
   finally { saving.value = false }
 }

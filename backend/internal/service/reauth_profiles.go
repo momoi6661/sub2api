@@ -115,7 +115,7 @@ func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profi
 	if profile.APIResultType != "code" && profile.APIResultType != "auth_file" {
 		return bad("API result type must be code or auth_file")
 	}
-	if address, err := mail.ParseAddress(profile.MailboxAddress); (profile.MailboxMode != "api" || profile.APIResultType != "auth_file") && (err != nil || address.Address != profile.MailboxAddress) {
+	if address, err := mail.ParseAddress(profile.MailboxAddress); profile.MailboxMode == "imap" && (err != nil || address.Address != profile.MailboxAddress) {
 		return bad("a valid mailbox address is required")
 	}
 	if profile.MailboxMode != "imap" && profile.MailboxMode != "api" {

@@ -114,7 +114,7 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 	if err != nil {
 		return nil, err
 	}
-	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] || !reflect.DeepEqual(current.Extra["one_click_auth_workspace_index"], account.Extra["one_click_auth_workspace_index"]) {
+	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] || !reflect.DeepEqual(current.Extra["one_click_auth_workspace_index"], account.Extra["one_click_auth_workspace_index"]) || !reflect.DeepEqual(current.Extra["one_click_auth_custom_input"], account.Extra["one_click_auth_custom_input"]) {
 		return nil, &service.ReauthExecutionError{Code: "ACCOUNT_CHANGED", Message: "Account credentials or authorization binding changed during this task"}
 	}
 	authProgress(ctx, "saving")
@@ -125,10 +125,11 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var input struct {
-		ProfileID      string `json:"profile_id" binding:"required,max=128"`
-		LoginEmail     string `json:"login_email" binding:"required,max=254"`
-		ProxyID        *int64 `json:"proxy_id"`
-		WorkspaceIndex *int   `json:"workspace_index" binding:"omitempty,min=1"`
+		ProfileID      string  `json:"profile_id" binding:"required,max=128"`
+		LoginEmail     string  `json:"login_email" binding:"max=254"`
+		CustomInput    *string `json:"custom_input" binding:"omitempty,max=16384"`
+		ProxyID        *int64  `json:"proxy_id"`
+		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -137,7 +138,7 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	}
 	input.LoginEmail = strings.TrimSpace(input.LoginEmail)
 	address, err := mail.ParseAddress(input.LoginEmail)
-	if err != nil || address.Address != input.LoginEmail || (input.ProxyID != nil && *input.ProxyID < 1) {
+	if (input.CustomInput == nil && (err != nil || address.Address != input.LoginEmail)) || (input.ProxyID != nil && *input.ProxyID < 1) {
 		response.BadRequest(c, "Invalid login email or proxy ID")
 		return
 	}
@@ -156,6 +157,9 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	draft := &service.Account{Platform: service.PlatformOpenAI, Type: "oauth", ProxyID: input.ProxyID, Extra: map[string]any{
 		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail, "one_click_auth_workspace_index": workspaceIndex,
 	}}
+	if input.CustomInput != nil {
+		draft.Extra["one_click_auth_custom_input"] = *input.CustomInput
+	}
 	record := h.taskSnapshot(ctx, draft, "new_account", "running")
 	if err := h.authTaskRepo.Create(ctx, []*service.AuthorizationTask{record}); err != nil {
 		finishAuthRequest(c, nil, err)
@@ -240,7 +244,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if email == "" {
 		email = codexCredentialString(account.Credentials, "email")
 	}
-	if email == "" {
+	if email == "" && !(profile.MailboxMode == "api" && profile.APIResultType == "auth_file") {
 		return nil, &service.ReauthExecutionError{Code: "LOGIN_EMAIL_REQUIRED", Message: "Configure this account's login email"}
 	}
 	resultType := profile.APIResultType
@@ -250,6 +254,11 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	task := service.ReauthRunnerTask{ResendAfterSeconds: profile.EmailResendSeconds, Mode: "protocol", Script: material["code_script"], ResultType: resultType, Input: material["custom_input"], Context: map[string]any{
 		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
+	if profile.MailboxMode == "api" {
+		task.Input, _ = account.Extra["one_click_auth_custom_input"].(string)
+		delete(task.Context, "secret")
+		delete(task.Context, "mailboxAddress")
+	}
 	workspaceIndex, expectedWorkspaceID, err := reauthWorkspaceSelection(account)
 	if err != nil {
 		return nil, err

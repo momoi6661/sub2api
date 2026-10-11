@@ -19,7 +19,7 @@ func (h *SettingHandler) TestReauthScript(c *gin.Context) {
 		response.BadRequest(c, "Invalid script test request")
 		return
 	}
-	if input.Profile.MailboxMode != "api" || input.LoginEmail == "" {
+	if input.Profile.MailboxMode != "api" {
 		response.BadRequest(c, "API profile and login email are required")
 		return
 	}
@@ -41,7 +41,7 @@ func (h *SettingHandler) TestReauthScript(c *gin.Context) {
 		profile.APIResultType = "code"
 	}
 	_, err := service.ExecuteReauthRunner(c.Request.Context(), service.ReauthRunnerTask{Mode: "protocol", Script: profile.CodeScript, ResultType: profile.APIResultType, Context: map[string]any{
-		"accountId": 0, "loginEmail": input.LoginEmail, "since": time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339), "apiURL": profile.APIURL, "mailboxAddress": profile.MailboxAddress, "secret": profile.Secret,
+		"accountId": 0, "loginEmail": input.LoginEmail, "since": time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
 	}, Input: profile.CustomInput})
 	if err != nil {
 		writeReauthError(c, err)

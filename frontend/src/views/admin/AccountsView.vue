@@ -506,7 +506,7 @@
       <template #footer><button class="btn btn-secondary" :disabled="authBindingBusy" @click="showAuthBinding = false">{{ t('common.cancel') }}</button><button class="btn btn-primary" :disabled="authBindingBusy || !bindingProfileID" @click="bindAuthProfile">{{ t('common.save') }}</button></template>
     </BaseDialog>
     <BaseDialog :show="!!oneClickAccount" :title="t('admin.accounts.oneClickAuth.title')" @close="oneClickAccount = null">
-      <OneClickAuthForm v-if="oneClickAccount" :key="oneClickAccount.id" :account-i-d="oneClickAccount.id" :initial-profile-i-d="String(oneClickAccount.extra?.one_click_auth_profile_id || '')" :initial-login-email="String(oneClickAccount.extra?.one_click_auth_login_email || oneClickAccount.credentials?.email || '')" :initial-workspace-index="Number(oneClickAccount.extra?.one_click_auth_workspace_index || 1)" @submitted="oneClickSubmitted" />
+      <OneClickAuthForm v-if="oneClickAccount" :key="oneClickAccount.id" :account-i-d="oneClickAccount.id" :initial-profile-i-d="String(oneClickAccount.extra?.one_click_auth_profile_id || '')" :initial-login-email="String(oneClickAccount.extra?.one_click_auth_login_email || oneClickAccount.credentials?.email || '')" :initial-custom-input="String(oneClickAccount.extra?.one_click_auth_custom_input ?? '')" :initial-workspace-index="Number(oneClickAccount.extra?.one_click_auth_workspace_index || 1)" @submitted="oneClickSubmitted" />
     </BaseDialog>
     <TotpStepUpDialog :controller="accountExportStepUp" />
   </AppLayout>

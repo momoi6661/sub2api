@@ -1674,7 +1674,7 @@
 
       <!-- One-click authorization settings -->
       <div
-        v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow"
+        v-if="account?.platform === 'openai' && account?.type === 'oauth' && !isSparkShadow && !authProfilesLoading && (authProfiles.length > 0 || !!oneClickAuthProfile)"
         class="border-t border-gray-200 pt-4 dark:border-dark-600"
         data-testid="one-click-auth-section"
       >

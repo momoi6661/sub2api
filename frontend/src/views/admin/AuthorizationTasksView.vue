@@ -59,6 +59,10 @@
             <li v-if="selected.finished_at"><time class="text-xs tabular-nums text-gray-500 dark:text-dark-400">{{ date(selected.finished_at) }}</time><p class="mt-0.5">{{ t(`${key}.statuses.${selected.status}`) }}</p></li>
           </ol>
         </div>
+        <div v-if="selected.result !== undefined">
+          <h3 class="mb-2 text-sm font-medium">{{ t('admin.accounts.authProfiles.returnResult') }}</h3>
+          <pre class="max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-gray-50 p-3 font-mono text-xs leading-5 dark:bg-dark-700">{{ formatAuthorizationResult(selected.result) }}</pre>
+        </div>
         <p v-if="detailError" role="alert" class="text-sm text-red-600">{{ detailError }}</p>
       </div>
       <template #footer>
@@ -86,6 +90,7 @@ import Icon from '@/components/icons/Icon.vue'
 import OneClickAuthProgress from '@/components/account/OneClickAuthProgress.vue'
 import { listAuthorizationTasks, getAuthorizationTask, submitAuthorizationTasks, cancelAuthorizationTask, deleteAuthorizationTask, type AuthorizationTask } from '@/api/admin/reauthProfiles'
 import { extractApiErrorMessage } from '@/utils/apiError'
+import { formatAuthorizationResult } from '@/utils/authorizationResult'
 
 const key = 'admin.accounts.authorizationTasks'
 const { t, te } = useI18n()
@@ -138,7 +143,7 @@ async function load() {
     tasks.value = data.items; selectedIDs.value = selectedIDs.value.filter(id => data.items.some(task => task.id === id && canDelete(task))); total.value = data.total; activeCount.value = data.active_count; now.value = Date.now()
     const id = Number(query('task'))
     if (id > 0) {
-      const task = data.items.find(item => item.id === id) || await getAuthorizationTask(id, controller.signal)
+      const task = await getAuthorizationTask(id, controller.signal)
       if (!controller.signal.aborted && !disposed && Number(query('task')) === id) selected.value = task
     }
   } catch (e) { if (!controller.signal.aborted) error.value = extractApiErrorMessage(e, t(`${key}.loadFailed`)) }
@@ -185,7 +190,7 @@ async function removeSelected() {
 }
 function visibility() { if (document.hidden) { clearTimeout(refreshTimer); request?.abort() } else void load() }
 watch(() => [route.query.q, route.query.status, route.query.page], () => { selectedIDs.value = []; clearTimeout(refreshTimer); clearTimeout(searchTimer); request?.abort(); searchTimer = setTimeout(() => { void load() }, 250) })
-watch(() => route.query.task, value => { if (!value) selected.value = null; else if (selected.value?.id !== Number(value)) void load(); scheduleRefresh() })
+watch(() => route.query.task, value => { if (!value) selected.value = null; else void load(); scheduleRefresh() })
 onMounted(() => { document.addEventListener('visibilitychange', visibility); void load() })
 onBeforeUnmount(() => { disposed = true; request?.abort(); clearTimeout(refreshTimer); clearTimeout(searchTimer); document.removeEventListener('visibilitychange', visibility) })
 </script>

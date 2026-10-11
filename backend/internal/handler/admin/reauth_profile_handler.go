@@ -3,7 +3,6 @@ package admin
 import (
 	"encoding/json"
 	"net/http"
-	"sort"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -12,6 +11,7 @@ import (
 )
 
 func (h *SettingHandler) TestReauthScript(c *gin.Context) {
+	c.Header("Cache-Control", "no-store")
 	var input struct {
 		Profile    service.ReauthProfile `json:"profile"`
 		LoginEmail string                `json:"login_email"`
@@ -42,28 +42,23 @@ func (h *SettingHandler) TestReauthScript(c *gin.Context) {
 	if profile.APIResultType == "" {
 		profile.APIResultType = "code"
 	}
-	result, err := service.ExecuteReauthRunner(c.Request.Context(), service.ReauthRunnerTask{Mode: "protocol", Script: profile.CodeScript, ResultType: profile.APIResultType, Context: map[string]any{
+	var returned json.RawMessage
+	result, err := service.ExecuteReauthRunner(c.Request.Context(), service.ReauthRunnerTask{Mode: "protocol", Script: profile.CodeScript, ResultType: profile.APIResultType, OnResult: func(value json.RawMessage) { returned = value }, Context: map[string]any{
 		"accountId": 0, "loginEmail": input.LoginEmail, "since": time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
 	}, Input: profile.CustomInput})
+	if len(returned) > 0 {
+		response.Success(c, gin.H{"succeeded": err == nil, "result": returned})
+		return
+	}
 	if err != nil {
 		writeReauthError(c, err)
 		return
 	}
 	if result.Type == "code" {
-		response.Success(c, gin.H{"succeeded": true, "result_type": "code", "code": result.Code})
+		response.Success(c, gin.H{"succeeded": true, "result_type": "code", "code": result.Code, "result": gin.H{"type": result.Type, "code": result.Code}})
 		return
 	}
-	var auth map[string]any
-	if err := json.Unmarshal(result.Auth, &auth); err != nil {
-		response.Success(c, gin.H{"succeeded": true, "result_type": "auth_file", "auth_keys": []string{"(JSON string)"}})
-		return
-	}
-	keys := make([]string, 0, len(auth))
-	for key := range auth {
-		keys = append(keys, key)
-	}
-	sort.Strings(keys)
-	response.Success(c, gin.H{"succeeded": true, "result_type": "auth_file", "auth_keys": keys})
+	response.Success(c, gin.H{"succeeded": true, "result_type": "auth_file", "result": gin.H{"type": result.Type, "auth": result.Auth}})
 }
 
 func (h *SettingHandler) ListReauthProfiles(c *gin.Context) {

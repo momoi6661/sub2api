@@ -3,6 +3,7 @@ package admin
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -19,6 +20,8 @@ import (
 )
 
 const authorizationTaskConcurrency = 2
+
+type authResultKey struct{}
 
 // A bounded worker drains persisted tasks only when woken. Each claimed task
 // owns its context and OAuth session; unrelated accounts may run in parallel.
@@ -98,6 +101,13 @@ func (h *AccountHandler) taskSnapshot(ctx context.Context, account *service.Acco
 }
 
 func (h *AccountHandler) recordedProgress(ctx context.Context, id int64) context.Context {
+	ctx = context.WithValue(ctx, authResultKey{}, func(result json.RawMessage) {
+		writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := h.authTaskRepo.SaveResult(writeCtx, id, result); err != nil {
+			slog.Error("authorization return value could not be saved", "task_id", id)
+		}
+	})
 	original, _ := ctx.Value(authProgressKey{}).(func(string))
 	return context.WithValue(ctx, authProgressKey{}, func(stage string) {
 		writeCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)

@@ -297,6 +297,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 		task.Context["expectedAccountID"] = expectedWorkspaceID
 		authProgress(ctx, "protocol_authorization")
 	}
+	task.OnResult, _ = ctx.Value(authResultKey{}).(func(json.RawMessage))
 	result, err := service.ExecuteReauthRunner(ctx, task)
 	if err != nil {
 		return nil, err

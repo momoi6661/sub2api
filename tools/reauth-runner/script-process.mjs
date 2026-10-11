@@ -29,6 +29,8 @@ try {
     if (content.length > 65536) result = failure('RESULT_TOO_LARGE', 'Authorization file exceeds 64 KB')
     else result = { type: 'auth_file', auth: content }
   } else result = failure('INVALID_SCRIPT_RESULT', 'Return a code string or one OAuth authorization JSON object')
+  // Keep the user's return value separate from the normalized authorization data.
+  result.script_result = value
   }
 } catch (error) {
   result = failure('SCRIPT_EXCEPTION', error?.message || 'Script failed')

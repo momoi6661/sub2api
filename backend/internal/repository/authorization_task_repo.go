@@ -105,6 +105,10 @@ func (r *authorizationTaskRepository) Cancel(ctx context.Context, id int64) erro
 	_, err := r.db.ExecContext(ctx, `UPDATE authorization_tasks SET status='cancelled',error_code='TASK_CANCELLED',error_message='Authorization task cancelled by operator.',finished_at=NOW() WHERE id=$1 AND status IN ('queued','running')`, id)
 	return err
 }
+func (r *authorizationTaskRepository) SaveResult(ctx context.Context, id int64, result json.RawMessage) error {
+	_, err := r.db.ExecContext(ctx, `UPDATE authorization_tasks SET result=$2::jsonb WHERE id=$1 AND status='running'`, id, string(result))
+	return err
+}
 func (r *authorizationTaskRepository) Delete(ctx context.Context, id int64) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM authorization_tasks WHERE id=$1`, id)
 	return err
@@ -113,7 +117,14 @@ func (r *authorizationTaskRepository) Get(ctx context.Context, id int64) (*servi
 	if _, err := r.db.ExecContext(ctx, expireAuthTasks); err != nil {
 		return nil, err
 	}
-	return scanAuthTask(r.db.QueryRowContext(ctx, `SELECT `+authTaskColumns+` FROM authorization_tasks WHERE id=$1`, id))
+	task, err := scanAuthTask(r.db.QueryRowContext(ctx, `SELECT `+authTaskColumns+` FROM authorization_tasks WHERE id=$1`, id))
+	if err != nil {
+		return nil, err
+	}
+	var result []byte
+	err = r.db.QueryRowContext(ctx, `SELECT result FROM authorization_tasks WHERE id=$1`, id).Scan(&result)
+	task.Result = result
+	return task, err
 }
 func (r *authorizationTaskRepository) List(ctx context.Context, q, status string, page, size int) (*service.AuthorizationTaskPage, error) {
 	if _, err := r.db.ExecContext(ctx, expireAuthTasks); err != nil {

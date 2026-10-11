@@ -115,6 +115,7 @@ export interface AuthorizationTask {
   status: 'queued' | 'running' | 'succeeded' | 'ready' | 'failed' | 'cancelled'; stage: AuthorizationStage
   created_at: string; started_at: string | null; finished_at: string | null
   events: { stage: AuthorizationStage; at: string }[]; error_code: string; error_message: string
+  result?: unknown
 }
 export interface AuthorizationTaskPage { items: AuthorizationTask[]; total: number; active_count: number }
 export async function submitAuthorizationTasks(accountIDs: number[], binding?: { profile_id: string; login_email: string; workspace_index?: number; custom_input?: string }): Promise<AuthorizationTask[]> {
@@ -152,7 +153,7 @@ export async function authorizeNewAccount(
   return data
 }
 
-export interface ReauthScriptTestResult { result_type: 'code' | 'auth_file'; code?: string; auth_keys?: string[] }
+export interface ReauthScriptTestResult { succeeded?: boolean; result_type?: 'code' | 'auth_file'; code?: string; auth_keys?: string[]; result?: unknown }
 export async function testReauthScript(profile: ReauthProfile, loginEmail: string, signal?: AbortSignal): Promise<ReauthScriptTestResult> {
   const { data } = await apiClient.post<ReauthScriptTestResult>('/admin/reauth-profiles/test-script', { profile, login_email: loginEmail }, { timeout: 40_000, signal })
   return data

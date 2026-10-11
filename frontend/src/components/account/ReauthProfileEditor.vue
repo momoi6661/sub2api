@@ -35,9 +35,9 @@
         <p class="input-hint">{{ t(form.has_code_script ? 'admin.accounts.authProfiles.scriptKeep' : 'admin.accounts.authProfiles.scriptHint') }}</p>
         <ReauthScriptRules />
         <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
-        <div v-if="testResult" role="status" class="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
-          <p>{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
-          <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{{ testResultDetail }}</pre>
+        <div v-if="testResult" role="status" class="rounded-lg bg-gray-50 p-3 text-sm text-gray-700 dark:bg-dark-700 dark:text-gray-200">
+          <p>{{ t('admin.accounts.authProfiles.returnResult') }}</p>
+          <pre class="mt-2 max-h-72 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-white/60 p-3 font-mono text-xs leading-5 dark:bg-dark-800/60">{{ testResultDetail }}</pre>
         </div>
       </div>
       <div v-if="form.mailbox_mode !== 'api'">
@@ -78,6 +78,7 @@ import ReauthScriptRules from './ReauthScriptRules.vue'
 import { readReauthScript, saveReauthProfile, testReauthScript, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { getAll } from '@/api/admin/proxies'
 import type { Proxy } from '@/types'
+import { formatAuthorizationResult } from '@/utils/authorizationResult'
 
 const props = defineProps<{ show: boolean; profile?: ReauthProfile | null }>()
 const emit = defineEmits<{ close: []; saved: [profile: ReauthProfile] }>()
@@ -115,7 +116,7 @@ async function testScript() {
     const result = await testReauthScript(form.value, testEmail.value, controller.signal)
     if (!controller.signal.aborted) {
       testResult.value = 'ok'
-      testResultDetail.value = result.result_type === 'code' ? `${result.result_type}: ${result.code || '(empty)'}` : `${result.result_type}: ${(result.auth_keys || []).join(', ')}`
+      testResultDetail.value = formatAuthorizationResult(result.result ?? { type: result.result_type, code: result.code, auth_keys: result.auth_keys })
     }
   } catch (e: any) { if (!controller.signal.aborted) { error.value = e?.message || t('admin.accounts.authProfiles.failed'); errorCode.value = e?.reason || e?.response?.data?.reason || e?.code || 'REQUEST_FAILED'; errorRetryable.value = (e?.metadata || e?.response?.data?.metadata)?.retryable === 'true' } }
   finally { testing.value = false }

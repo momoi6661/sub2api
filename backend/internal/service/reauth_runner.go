@@ -34,23 +34,25 @@ type ReauthRunnerMailbox struct {
 }
 
 type ReauthRunnerTask struct {
-	ResendAfterSeconds int                  `json:"resendAfterSeconds,omitempty"`
-	OnProgress         func(string)         `json:"-"`
-	Mailbox            *ReauthRunnerMailbox `json:"mailbox,omitempty"`
-	Mode               string               `json:"mode"`
-	Script             string               `json:"script"`
-	ResultType         string               `json:"resultType"`
-	Input              string               `json:"input,omitempty"`
-	Context            map[string]any       `json:"context"`
-	ProxyURL           string               `json:"proxyURL,omitempty"`
+	ResendAfterSeconds int                   `json:"resendAfterSeconds,omitempty"`
+	OnProgress         func(string)          `json:"-"`
+	OnResult           func(json.RawMessage) `json:"-"`
+	Mailbox            *ReauthRunnerMailbox  `json:"mailbox,omitempty"`
+	Mode               string                `json:"mode"`
+	Script             string                `json:"script"`
+	ResultType         string                `json:"resultType"`
+	Input              string                `json:"input,omitempty"`
+	Context            map[string]any        `json:"context"`
+	ProxyURL           string                `json:"proxyURL,omitempty"`
 }
 
 type ReauthRunnerResult struct {
-	Type  string                `json:"type"`
-	Code  string                `json:"code"`
-	State string                `json:"state"`
-	Auth  json.RawMessage       `json:"auth"`
-	Error *ReauthExecutionError `json:"error,omitempty"`
+	ScriptResult json.RawMessage       `json:"script_result,omitempty"`
+	Type         string                `json:"type"`
+	Code         string                `json:"code"`
+	State        string                `json:"state"`
+	Auth         json.RawMessage       `json:"auth"`
+	Error        *ReauthExecutionError `json:"error,omitempty"`
 }
 
 func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRunnerResult, error) {
@@ -125,6 +127,9 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	var result ReauthRunnerResult
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, &ReauthExecutionError{Code: "INVALID_RUNNER_RESULT", Message: "Runner returned invalid JSON"}
+	}
+	if task.OnResult != nil && len(result.ScriptResult) > 0 {
+		task.OnResult(result.ScriptResult)
 	}
 	if result.Type == "error" && result.Error != nil {
 		if result.Error.Code == "" || result.Error.Message == "" {

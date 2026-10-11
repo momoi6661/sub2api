@@ -5,6 +5,7 @@ import { baseCompile } from '@intlify/message-compiler'
 import ReauthProfileEditor from '../ReauthProfileEditor.vue'
 import en from '@/i18n/locales/en/admin/accounts'
 import zh from '@/i18n/locales/zh/admin/accounts'
+import { testReauthScript } from '@/api/admin/reauthProfiles'
 
 vi.mock('@/api/admin/reauthProfiles', () => ({
   readReauthScript: vi.fn().mockResolvedValue({ code_script: 'return { type: "code", code: "123456" };', custom_input: '' }),
@@ -40,6 +41,14 @@ describe('ReauthProfileEditor custom mode', () => {
         expect(document.querySelector('#auth-profile-script')).not.toBeNull()
         expect(document.querySelector('#auth-profile-test-input')).not.toBeNull()
         expect(document.querySelector('.modal-body')?.textContent).toContain('return { type: "auth_file", auth: authJson }')
+        const returned = { type: 'auth_file', auth: JSON.stringify({ email: 'owner@example.com', access_token: 'test-token' }), custom: { items: [1, 2] } }
+        vi.mocked(testReauthScript).mockResolvedValueOnce({ succeeded: true, result: returned })
+        const testButton = Array.from(document.querySelectorAll<HTMLButtonElement>('.modal-body button')).find(el => el.textContent?.includes(messages.accounts.authProfiles.testCode))!
+        testButton.click()
+        await flushPromises()
+        const output = document.querySelector('[role="status"] pre')!
+        expect(JSON.parse(output.textContent!)).toEqual({ ...returned, auth: JSON.parse(returned.auth) })
+        expect(output.classList.contains('max-h-72')).toBe(true)
         document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
         expect(wrapper.emitted('close')).toHaveLength(1)
       } finally { wrapper.unmount() }

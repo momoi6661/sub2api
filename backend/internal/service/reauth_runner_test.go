@@ -55,3 +55,25 @@ func TestReauthRunnerProtocolResultAndProgress(t *testing.T) {
 		})
 	}
 }
+
+func TestReauthRunnerPreservesScriptReturnBeforeAuthorizationError(t *testing.T) {
+	returned := `{"type":"code","code":"123456","custom":{"items":[1,2]}}`
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprintf(w, `{"type":"error","error":{"code":"CONSENT_FAILED","message":"Consent failed"},"script_result":%s}`, returned)
+	}))
+	defer server.Close()
+	t.Setenv("ONE_CLICK_AUTH_RUNNER_URL", server.URL)
+	t.Setenv("ONE_CLICK_AUTH_RUNNER_TOKEN", "01234567890123456789012345678901")
+	var saved json.RawMessage
+	_, err := ExecuteReauthRunner(context.Background(), ReauthRunnerTask{
+		Mode: "oauth_protocol", ResultType: "code", OnResult: func(value json.RawMessage) { saved = value },
+	})
+	var execution *ReauthExecutionError
+	if !errors.As(err, &execution) || execution.Code != "CONSENT_FAILED" {
+		t.Fatalf("expected authorization error, got %v", err)
+	}
+	if string(saved) != returned {
+		t.Fatalf("script return was lost: %s", saved)
+	}
+}

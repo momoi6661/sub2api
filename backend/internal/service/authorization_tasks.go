@@ -2,10 +2,11 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 )
 
-// Task history deliberately contains no mailbox secrets, scripts or OAuth credentials.
+// Return values are loaded only for task details; list summaries exclude them.
 type AuthorizationTask struct {
 	ID           int64                    `json:"id"`
 	AccountID    int64                    `json:"account_id"`
@@ -22,6 +23,7 @@ type AuthorizationTask struct {
 	CreatedAt    time.Time                `json:"created_at"`
 	StartedAt    *time.Time               `json:"started_at"`
 	FinishedAt   *time.Time               `json:"finished_at"`
+	Result       json.RawMessage          `json:"result,omitempty"`
 }
 
 type AuthorizationTaskEvent struct {
@@ -39,6 +41,7 @@ type AuthorizationTaskRepository interface {
 	Create(context.Context, []*AuthorizationTask) error
 	Claim(context.Context) (*AuthorizationTask, error)
 	Report(context.Context, int64, string) error
+	SaveResult(context.Context, int64, json.RawMessage) error
 	Finish(context.Context, int64, string, string, string) error
 	Cancel(context.Context, int64) error
 	Delete(context.Context, int64) error

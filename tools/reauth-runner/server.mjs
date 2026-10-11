@@ -41,7 +41,13 @@ const server = http.createServer(async (request, response) => {
     } else if (!task.script.trim()) throw new Error('script')
     let result
     if (task.mode === 'oauth_protocol' && task.resultType === 'code') {
-      result = await authorizeWithProtocol(task, executeScript, controller.signal, report)
+      let scriptResult
+      result = await authorizeWithProtocol(task, async (...args) => {
+        const value = await executeScript(...args)
+        if (value.script_result !== undefined) scriptResult = value.script_result
+        return value
+      }, controller.signal, report)
+      if (scriptResult !== undefined) result.script_result = scriptResult
     } else if (task.mode === 'protocol') result = await executeScript(task, { signal: controller.signal })
     else throw new Error('mode')
     finish(result)

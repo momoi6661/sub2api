@@ -375,11 +375,36 @@ for (const ending of ['success', 'failure', 'cancel', 'deadline']) test(`${endin
   assert.equal(mock.requests.some(r => r.url.pathname.endsWith('/resend')), false)
 })
 
-for (const known of [false, true]) test(`personal-only sessions never select a workspace (known ID: ${known})`, async () => {
-  const mock = provider({ workspaces: [{ id: 'account-1', is_personal: true }] })
+for (const known of [false, true]) test(`personal-only sessions can authorize (known ID: ${known})`, async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1', is_personal: true }], expectedWorkspace: 'account-1' })
   const result = await authorizeWithProtocol(makeTask(known ? { expectedAccountID: 'account-1' } : {}), mock.reader, undefined, mock.report, mock.fetch)
-  assert.equal(result.error.code, 'TEAM_WORKSPACE_UNAVAILABLE')
+  assert.equal(result.type, 'auth_file')
+})
+
+for (const workspaces of [
+  [{ id: 'personal', is_personal: true }, { id: 'team-a' }, { id: 'account-1' }],
+  [{ id: 'personal-a', is_personal: true }, { id: 'account-1', is_personal: true }]
+]) test(`account index selects the second eligible workspace: ${JSON.stringify(workspaces)}`, async () => {
+  const mock = provider({ workspaces, expectedWorkspace: 'account-1' })
+  assert.equal((await authorizeWithProtocol(makeTask({ workspaceIndex: 2 }), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
+})
+
+test('an out-of-range index never falls back to personal or the first workspace', async () => {
+  const mock = provider({ workspaces: [{ id: 'personal', is_personal: true }, { id: 'account-1' }] })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex: 2 }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.error.code, 'WORKSPACE_INDEX_OUT_OF_RANGE')
   assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
+})
+
+for (const workspaceIndex of [0, -1, 1.5, '2']) test(`invalid workspace index stops before login: ${workspaceIndex}`, async () => {
+  const mock = provider()
+  assert.equal((await authorizeWithProtocol(makeTask({ workspaceIndex }), mock.reader, undefined, mock.report, mock.fetch)).error.code, 'INVALID_WORKSPACE_INDEX')
+  assert.equal(mock.requests.length, 0)
+})
+
+test('reauthorization keeps the existing workspace ID when list order changes', async () => {
+  const mock = provider({ workspaces: [{ id: 'team-other' }, { id: 'account-1' }], expectedWorkspace: 'account-1' })
+  assert.equal((await authorizeWithProtocol(makeTask({ workspaceIndex: 1, expectedAccountID: 'account-1' }), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
 })
 
 test('a token for a different workspace cannot replace the selected team identity', async () => {

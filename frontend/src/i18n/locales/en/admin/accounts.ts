@@ -666,6 +666,8 @@ export default {
         step5: 'Save account',
         progressHint: "Stages are reported by the server. Protocol authorization and mail delivery may take time; tasks have a 10-minute limit.",
         createHint: 'Select a saved profile and enter the new account login email. Successful authorization creates the account and saves its profile binding. Automatic recovery defaults to off.',
+        workspaceIndex: 'Workspace index',
+        workspaceIndexHint: 'Default 1. Enter a position from 1 to the available workspace count. Select from team/organization workspaces in provider order, or personal workspaces when no team is available. Out-of-range positions fail.',
         authorizeAndCreate: 'Authorize and add account',
         authorizing: 'Authorizing, up to 10 minutes. Close this dialog to cancel.',
         readyToCreate: 'Credentials are ready. If creation fails, click Create again without repeating authorization.',

@@ -41,6 +41,8 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
   let transport, sentinel, deviceID, selectedWorkspaceID, phase = 'PROTOCOL_CONNECTION_FAILED'
   try {
     signal?.throwIfAborted()
+    const workspaceIndex = task.context.workspaceIndex ?? 1
+    if (!Number.isSafeInteger(workspaceIndex) || workspaceIndex < 1) reject('INVALID_WORKSPACE_INDEX', 'Workspace index must be a positive integer')
     if (task.mailbox) {
       report('mailbox_connect')
       const snapshot = await executeScript({ ...task, operation: 'mailbox_snapshot' }, { timeout: 10000, signal })
@@ -237,11 +239,14 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       const expectedID = task.context.expectedAccountID
       const isPersonal = item => item.is_personal === true || item.type === 'personal' ||
         /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))
-      // Preserve an existing identity; new accounts skip personal workspaces.
-      const workspace = expectedID ? workspaces.find(item => item.id === expectedID)
-        : workspaces.find(item => !isPersonal(item))
-      if (expectedID && !workspace) reject('WORKSPACE_ID_MISMATCH', 'The existing account workspace is not available in this authorization session')
-      if (!workspace || isPersonal(workspace)) reject('TEAM_WORKSPACE_UNAVAILABLE', 'No eligible team workspace is available; personal workspace authorization is disabled')
+      // Team workspaces take priority; personal is allowed when it is the only option.
+      // Keep a known account identity stable when reauthorizing.
+      const teams = workspaces.filter(item => !isPersonal(item))
+      const eligible = teams.length ? teams : workspaces
+      const workspace = expectedID ? workspaces.find(item => item.id === expectedID) : eligible[workspaceIndex - 1]
+      if (!workspace) reject(expectedID ? 'WORKSPACE_ID_MISMATCH' : 'WORKSPACE_INDEX_OUT_OF_RANGE', expectedID
+        ? 'The existing account workspace is not available in this authorization session'
+        : `Workspace index ${workspaceIndex} exceeds the ${eligible.length} available workspaces`)
       selectedWorkspaceID = workspace.id
       const selected = await post('/api/accounts/workspace/select', { workspace_id: workspace.id }, step.url)
       const target = nextURL(selected.data)

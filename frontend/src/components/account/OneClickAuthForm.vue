@@ -14,6 +14,11 @@
       <label for="new-account-auth-email" class="input-label">{{ t('admin.accounts.authProfiles.loginEmail') }}</label>
       <input id="new-account-auth-email" v-model="loginEmail" class="input" type="email" required maxlength="254" autocomplete="email" :disabled="busy" placeholder="name@example.com" />
     </div>
+    <div v-if="!accountID">
+      <label for="new-account-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
+      <input id="new-account-workspace-index" v-model.number="workspaceIndex" class="input" type="number" min="1" step="1" required :disabled="busy" />
+      <p class="input-hint">{{ t('admin.accounts.oneClickAuth.workspaceIndexHint') }}</p>
+    </div>
     <p class="input-hint">{{ t('admin.accounts.authProfiles.browser') }}</p>
     <OneClickAuthProgress v-if="taskStartedAt && !accountID" :stage="submitting ? 'saving' : taskStage" :status="busy ? 'running' : error ? 'failed' : 'ready'" :started-at="taskStartedAt" :finished-at="busy ? undefined : taskFinishedAt" :error="error && errorCode ? `${errorCode} · ${t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable')}` : undefined" />
     <p v-if="authorization" role="status" class="text-sm text-green-600 dark:text-green-400">{{ t('admin.accounts.oneClickAuth.readyToCreate') }}</p>
@@ -40,10 +45,11 @@ import { authorizeNewAccount, listReauthProfiles, submitAuthorizationTasks, type
 import { extractApiErrorCode, extractApiErrorMessage, extractApiErrorMetadata } from '@/utils/apiError'
 
 const props = withDefaults(defineProps<{ proxyID?: number | null; submitting?: boolean; accountID?: number; initialProfileID?: string; initialLoginEmail?: string }>(), { proxyID: null, submitting: false, initialProfileID: '', initialLoginEmail: '' })
-const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string]; submitted: [task: AuthorizationTask] }>()
+const emit = defineEmits<{ authorized: [payload: NewAccountAuthorization, profileID: string, loginEmail: string, workspaceIndex: number]; submitted: [task: AuthorizationTask] }>()
 const { t } = useI18n()
 const profiles = ref<ReauthProfile[]>([])
 const profileID = ref(props.initialProfileID), loginEmail = ref(props.initialLoginEmail)
+const workspaceIndex = ref(1)
 const loading = ref(false), authorizing = ref(false), showEditor = ref(false)
 const loadError = ref(''), error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const authorization = shallowRef<NewAccountAuthorization | null>(null)
@@ -54,7 +60,7 @@ const selectedEnabled = computed(() => profiles.value.some(p => p.id === profile
 let controller: AbortController | null = null
 let disposed = false
 
-watch([profileID, loginEmail, () => props.proxyID], () => {
+watch([profileID, loginEmail, workspaceIndex, () => props.proxyID], () => {
   controller?.abort()
   authorization.value = null
   error.value = ''; errorCode.value = ''
@@ -90,14 +96,14 @@ async function authorize() {
     if (!authorization.value) {
       const result = await authorizeNewAccount(selectedProfile, email, props.proxyID, taskController.signal, progress => {
         if (!disposed && !taskController.signal.aborted) taskStage.value = progress.stage
-      })
+      }, workspaceIndex.value)
       if (disposed || taskController.signal.aborted) return
       authorization.value = result
     }
     taskStage.value = 'verifying'
     if (!disposed && !taskController.signal.aborted) {
       // Retain the result if creation fails, so retrying does not repeat OAuth.
-      emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email)
+      emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email, workspaceIndex.value)
     }
   } catch (e) {
     if (!disposed && !taskController.signal.aborted) {

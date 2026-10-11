@@ -114,7 +114,7 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 	if err != nil {
 		return nil, err
 	}
-	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] {
+	if !reflect.DeepEqual(current.Credentials, account.Credentials) || current.Extra["one_click_auth_profile_id"] != profileID || current.Extra["one_click_auth_login_email"] != account.Extra["one_click_auth_login_email"] || !reflect.DeepEqual(current.Extra["one_click_auth_workspace_index"], account.Extra["one_click_auth_workspace_index"]) {
 		return nil, &service.ReauthExecutionError{Code: "ACCOUNT_CHANGED", Message: "Account credentials or authorization binding changed during this task"}
 	}
 	authProgress(ctx, "saving")
@@ -125,9 +125,10 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	c.Header("Cache-Control", "no-store")
 	var input struct {
-		ProfileID  string `json:"profile_id" binding:"required,max=128"`
-		LoginEmail string `json:"login_email" binding:"required,max=254"`
-		ProxyID    *int64 `json:"proxy_id"`
+		ProfileID      string `json:"profile_id" binding:"required,max=128"`
+		LoginEmail     string `json:"login_email" binding:"required,max=254"`
+		ProxyID        *int64 `json:"proxy_id"`
+		WorkspaceIndex *int   `json:"workspace_index" binding:"omitempty,min=1"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 4096)
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -148,8 +149,12 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 	ctx, taskCancel := context.WithCancel(ctx)
 	defer cancel()
 	defer taskCancel()
+	workspaceIndex := 1
+	if input.WorkspaceIndex != nil {
+		workspaceIndex = *input.WorkspaceIndex
+	}
 	draft := &service.Account{Platform: service.PlatformOpenAI, Type: "oauth", ProxyID: input.ProxyID, Extra: map[string]any{
-		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail,
+		"one_click_auth_profile_id": input.ProfileID, "one_click_auth_login_email": input.LoginEmail, "one_click_auth_workspace_index": workspaceIndex,
 	}}
 	record := h.taskSnapshot(ctx, draft, "new_account", "running")
 	if err := h.authTaskRepo.Create(ctx, []*service.AuthorizationTask{record}); err != nil {
@@ -245,6 +250,14 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	task := service.ReauthRunnerTask{ResendAfterSeconds: profile.EmailResendSeconds, Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
 		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
+	workspaceIndex := 1
+	if value, exists := account.Extra["one_click_auth_workspace_index"]; exists {
+		encoded, err := json.Marshal(value)
+		if err != nil || json.Unmarshal(encoded, &workspaceIndex) != nil || workspaceIndex < 1 {
+			return nil, &service.ReauthExecutionError{Code: "INVALID_WORKSPACE_INDEX", Message: "Workspace index must be a positive integer"}
+		}
+	}
+	task.Context["workspaceIndex"] = workspaceIndex
 	task.OnProgress = func(stage string) { authProgress(ctx, stage) }
 	if profile.MailboxMode == "imap" {
 		task.Mailbox = &service.ReauthRunnerMailbox{Host: profile.IMAPHost, Port: profile.IMAPPort, Username: profile.IMAPUsername, Folder: profile.Folder, SenderFilter: profile.SenderFilter, CodePattern: profile.CodePattern, WaitSeconds: profile.MailboxWaitSeconds}

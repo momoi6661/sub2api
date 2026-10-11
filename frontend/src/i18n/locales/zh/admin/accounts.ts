@@ -465,6 +465,8 @@ export default {
         step5: '保存账号',
         progressHint: "阶段由服务器实时返回；协议授权和收件可能耗时较长，任务最长 10 分钟。",
         createHint: '选择已保存的授权配置，输入待添加账号的登录邮箱。成功后创建账号并绑定该配置；失效自动授权默认关闭。',
+        workspaceIndex: '工作区序号',
+        workspaceIndexHint: '默认 1，填写 1 到可选工作区数量。优先在团队/组织工作区中按返回顺序选择；只有个人工作区时选择个人。超出数量会报错。',
         authorizeAndCreate: '一键授权并添加',
         authorizing: '正在授权，最长 10 分钟。关闭窗口可取消本次任务。',
         readyToCreate: '授权凭据已获取。若添加失败，可再次点击添加，无需重复授权。',

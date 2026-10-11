@@ -11,10 +11,12 @@ Only existing accounts are authorized. `/about-you`, signup and profile creation
 return `ACCOUNT_NOT_REGISTERED` without submitting registration data. CAPTCHA and
 unsatisfied Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`,
 preserving the HTTP status when available. Phone verification, passkeys, MFA and
-additional provider verification return `MANUAL_REQUIRED`. New accounts select the first offered non-personal
-workspace. Personal workspaces (flag, type or title/name) are excluded, including
-when reauthorizing a known personal ID; no eligible workspace returns
-`TEAM_WORKSPACE_UNAVAILABLE`. Issued tokens must match the selected workspace ID.
+additional provider verification return `MANUAL_REQUIRED`. New accounts use the account-level
+`workspace_index` (default 1) within the offered non-personal workspace list;
+when no team is available, the personal list is eligible instead. Out-of-range
+indexes return `WORKSPACE_INDEX_OUT_OF_RANGE`. The selection is stored in account
+extra as `one_click_auth_workspace_index`, not in mailbox profiles.
+Issued tokens must match the selected workspace ID.
 Reauthorization with a known account ID selects that workspace exactly; missing
 workspace lists and mismatched IDs stop with `WORKSPACE_LIST_UNAVAILABLE` and
 `WORKSPACE_ID_MISMATCH`. Password pages (including redirected

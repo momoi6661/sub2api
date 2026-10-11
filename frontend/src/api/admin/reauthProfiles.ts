@@ -142,10 +142,10 @@ export interface NewAccountAuthorization {
 }
 
 export async function authorizeNewAccount(
-  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal, onProgress?: ProgressCallback
+  profileID: string, loginEmail: string, proxyID: number | null, signal: AbortSignal, onProgress?: ProgressCallback, workspaceIndex = 1
 ): Promise<NewAccountAuthorization> {
   const { data } = await apiClient.post<NewAccountAuthorization>('/admin/accounts/one-click-auth', {
-    profile_id: profileID, login_email: loginEmail, proxy_id: proxyID
+    profile_id: profileID, login_email: loginEmail, proxy_id: proxyID, workspace_index: workspaceIndex
   }, authorizationRequestConfig(onProgress, signal))
   return data
 }

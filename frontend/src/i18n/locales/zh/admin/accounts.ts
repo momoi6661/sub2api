@@ -346,7 +346,7 @@ export default {
         customInputHint: '可留空；例如：邮箱----密码----2FA密钥。内容会原样传给代码变量 input。',
         customInputDescription: 'input 是输入框的原始文本，不包装、不解析；JSON 请在代码中使用 JSON.parse(input)。允许留空。',
         customParamsTitle: '自定义代码可用参数',
-        customParamsDescription: 'input：应用授权时填写的自定义输入原文，可为空。\ncontext.accountId：账号 ID（新账号授权时为 0）。\ncontext.loginEmail：协议验证码模式的登录邮箱。\ncontext.since：本次任务开始时间。\n返回验证码：return { type: "code", code: "验证码" }；返回授权文件：return { type: "auth_file", auth: 授权对象或 JSON 字符串 }。',
+        customParamsDescription: 'input：应用授权时填写的自定义输入原文，可为空。\ncontext.accountId：账号 ID（新账号授权时为 0）。\ncontext.loginEmail：协议验证码模式的登录邮箱。\ncontext.since：本次任务开始时间。\n返回验证码：{codeExample}；返回授权文件：{fileExample}。',
         scriptKeep: '已加密保存代码。留空保留原代码，填写后替换。',
         scriptHint: "填写 async 函数体，在服务器执行并 await 返回结果；支持 fetch，无需 CORS。只执行受信任管理员代码，30 秒超时。",
         testEmail: '测试账号登录邮箱',

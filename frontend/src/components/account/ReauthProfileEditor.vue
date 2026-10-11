@@ -26,7 +26,7 @@
         <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
         <div class="rounded-lg border border-primary-200 bg-primary-50 p-3 text-sm text-primary-900 dark:border-primary-900/60 dark:bg-primary-950/30 dark:text-primary-100">
           <p class="font-semibold">{{ t('admin.accounts.authProfiles.customParamsTitle') }}</p>
-          <p class="mt-1 whitespace-pre-line text-xs leading-5">{{ t('admin.accounts.authProfiles.customParamsDescription') }}</p>
+          <p class="mt-1 whitespace-pre-line text-xs leading-5">{{ t('admin.accounts.authProfiles.customParamsDescription', { codeExample: 'return { type: "code", code: "123456" }', fileExample: 'return { type: "auth_file", auth: authJson }' }) }}</p>
         </div>
         <label for="auth-profile-test-input" class="input-label">{{ t('admin.accounts.authProfiles.customInput') }}</label>
         <textarea id="auth-profile-test-input" v-model="form.custom_input" class="input min-h-24 font-mono" maxlength="16384" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />

@@ -552,7 +552,7 @@ export default {
         customInputHint: 'Optional; for example email----password----2FA-secret. It is passed unchanged to input.',
         customInputDescription: 'input is the raw text, without wrapping or parsing. Parse JSON in your script with JSON.parse(input). May be empty.',
         customParamsTitle: 'Parameters available to custom code',
-        customParamsDescription: 'input: the raw custom value entered when applying authorization; may be empty.\ncontext.accountId: account ID (0 for new-account authorization).\ncontext.loginEmail: login email for protocol code mode.\ncontext.since: task start time.\nReturn a code: return { type: "code", code: "verification-code" }; return a file: return { type: "auth_file", auth: an object or JSON string }.',
+        customParamsDescription: 'input: the raw custom value entered when applying authorization; may be empty.\ncontext.accountId: account ID (0 for new-account authorization).\ncontext.loginEmail: login email for protocol code mode.\ncontext.since: task start time.\nReturn a code: {codeExample}; return a file: {fileExample}.',
         scriptKeep: 'Code is encrypted. Leave blank to retain it, or enter replacement code.',
         scriptHint: "Enter an async function body executed on the server. fetch is available without CORS. Only trusted administrator code is supported. Timeout: 30 seconds.",
         testEmail: 'Test account login email',

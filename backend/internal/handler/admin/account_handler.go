@@ -1698,6 +1698,18 @@ func (h *AccountHandler) applyOAuthCredentials(ctx context.Context, accountID in
 		updatedAccount = cleared
 	}
 
+	// Importing fresh authorization also resumes an account that was stopped.
+	// Clearing errors restores status, but does not change the scheduling switch.
+	if existing.Platform == service.PlatformOpenAI {
+		resumed, resumeErr := h.adminService.SetAccountSchedulable(ctx, accountID, true)
+		if resumeErr != nil {
+			return nil, resumeErr
+		}
+		if resumed != nil {
+			updatedAccount = resumed
+		}
+	}
+
 	if h.tokenCacheInvalidator != nil && updatedAccount.IsOAuth() {
 		if invalidateErr := h.tokenCacheInvalidator.InvalidateToken(ctx, updatedAccount); invalidateErr != nil {
 			slog.Warn("apply_oauth_credentials.invalidate_token_failed",

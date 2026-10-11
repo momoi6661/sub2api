@@ -18,6 +18,7 @@ export interface ReauthProfile {
   sender_filter: string
   code_pattern: string
   mailbox_wait_seconds?: number
+  email_resend_seconds?: number
   proxy_id: number | null
   proxy_ids?: number[]
   secret?: string
@@ -68,7 +69,7 @@ export type ProgressCallback = (progress: AuthorizationProgress) => void
 // Use the existing client/interceptors so streamed tasks retain login refresh,
 // admin request headers, structured errors and cancellation behavior.
 function authorizationRequestConfig(onProgress?: ProgressCallback, signal?: AbortSignal) {
-  if (!onProgress) return { timeout: 145_000, signal }
+  if (!onProgress) return { timeout: 615_000, signal }
   let offset = 0
   function consume(text: string) {
     while (true) {
@@ -84,7 +85,7 @@ function authorizationRequestConfig(onProgress?: ProgressCallback, signal?: Abor
     }
   }
   return {
-    timeout: 145_000, signal, adapter: 'xhr' as const, responseType: 'text' as const,
+    timeout: 615_000, signal, adapter: 'xhr' as const, responseType: 'text' as const,
     params: { stream: '1' },
     onDownloadProgress: (progress: { event?: ProgressEvent }) => {
       const request = progress.event?.target

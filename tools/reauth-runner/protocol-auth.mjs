@@ -1,6 +1,8 @@
-import { randomBytes, createHash } from 'node:crypto'
+import { randomBytes, randomUUID, createHash } from 'node:crypto'
 import { CookieJar } from 'tough-cookie'
 import { createCurlCffiFetch } from './curl-cffi-fetch.mjs'
+import { createSentinel } from './sentinel.mjs'
+import { browserHeaders } from './browser-profile.mjs'
 
 const origin = 'https://auth.openai.com'
 const redirectURI = 'http://localhost:1455/auth/callback'
@@ -36,7 +38,7 @@ function nextURL(data) {
 
 // The state and verifier are task-local; cookies never survive this function.
 export async function authorizeWithProtocol(task, executeScript, signal, report = () => {}, fetchOverride) {
-  let transport, phase = 'PROTOCOL_CONNECTION_FAILED'
+  let transport, sentinel, deviceID, phase = 'PROTOCOL_CONNECTION_FAILED'
   try {
     signal?.throwIfAborted()
     if (task.mailbox) {
@@ -70,16 +72,16 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       if (url.origin !== origin || url.username || url.password) reject('OAUTH_REDIRECT_INVALID', 'Authorization redirected outside the supported provider')
       checkStep(url)
       const cookies = await jar.getCookieString(url.href)
-      const deviceID = (await jar.getCookies(url.href)).find(cookie => cookie.key === 'oai-did')?.value
+      const requestDeviceID = deviceID || (await jar.getCookies(url.href)).find(cookie => cookie.key === 'oai-did')?.value
       const response = await fetch(url.href, {
         ...options, redirect: 'manual', size: 1024 * 1024,
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
-        headers: { Accept: options.method === 'POST' ? 'application/json' : 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9',
+        headers: { ...browserHeaders, Accept: options.method === 'POST' ? 'application/json' : 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9',
             'Sec-Fetch-Dest': options.method === 'POST' ? 'empty' : 'document',
             'Sec-Fetch-Mode': options.method === 'POST' ? 'cors' : 'navigate',
             'Sec-Fetch-Site': 'same-origin',
             ...(options.method === 'GET' ? { 'Upgrade-Insecure-Requests': '1' } : {}),
-          ...(options.method === 'POST' && deviceID ? { 'oai-device-id': deviceID } : {}),
+          ...(options.method === 'POST' && requestDeviceID ? { 'oai-device-id': requestDeviceID } : {}),
           ...(cookies ? { Cookie: cookies } : {}), ...options.headers }
       })
       for (const cookie of response.headers.raw()['set-cookie'] || []) await jar.setCookie(cookie, url.href)
@@ -91,7 +93,15 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         throw Object.assign(new Error(result.error.message), { result })
       }
       let data = {}
-      try { data = JSON.parse(text) } catch { /* Login landing pages are HTML. */ }
+      try { data = JSON.parse(text) } catch {
+        // Only an actually empty successful API response may take the empty
+        // send/resend fallback. An HTML error page is not delivery confirmation.
+        if (options.method === 'POST' && response.ok && text.trim()) {
+          const result = failure('PROVIDER_INVALID_RESPONSE', 'The authorization API returned a non-JSON response')
+          result.error.httpStatus = response.status
+          throw Object.assign(new Error(result.error.message), { result })
+        }
+      }
       if (!data || typeof data !== 'object' || Array.isArray(data)) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider returned an invalid authorization response')
       if (/captcha|challenge|sentinel/i.test(String(data.error?.code || ''))) {
         const result = failure('PROVIDER_SECURITY_CHALLENGE', 'The authorization provider requires a security challenge')
@@ -128,13 +138,19 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       }
       reject('OAUTH_REDIRECT_INVALID', 'Authorization exceeded the redirect limit')
     }
-    const post = async (path, data, referer) => request(path, {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin, Referer: referer.href }, body: JSON.stringify(data)
-    })
+    const post = async (path, data, referer) => {
+      const sentinelHeaders = /\/(authorize\/continue|passwordless\/send-otp|email-otp\/(resend|validate))$/.test(path)
+        ? await sentinel.headers('authorize_continue') : {}
+      return request(path, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin,
+        Referer: referer.href, ...sentinelHeaders }, body: JSON.stringify(data) })
+    }
 
     report('protocol_start')
     let step = await follow(authorize)
     if (!step.code) {
+      deviceID = (await jar.getCookies(origin)).find(cookie => cookie.key === 'oai-did')?.value || randomUUID()
+      await jar.setCookie(`oai-did=${deviceID}; Secure; Path=/`, origin)
+      sentinel = await createSentinel(fetch, { deviceID, signal })
       phase = 'EMAIL_SUBMIT_FAILED'
       report('email_login')
       step = await post('/api/accounts/authorize/continue', { username: { value: task.context.loginEmail, kind: 'email' } }, step.url)
@@ -167,7 +183,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
           const reading = executeScript({ ...task, resultType: 'code' }, {
             signal: readerSignal, ...(task.mailbox ? { timeout: 190000 } : {})
           })
-          const resendDue = new Promise(resolve => { resendTimer = setTimeout(() => resolve(null), 30000) })
+          const resendDue = new Promise(resolve => { resendTimer = setTimeout(() => resolve(null), (task.resendAfterSeconds || 30) * 1000) })
           result = await Promise.race([reading, resendDue])
           if (result === null) {
             signal?.throwIfAborted()
@@ -250,5 +266,5 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
     // Never include provider response bodies, callback URLs or cookies in errors.
     if (error.code === 'PROXY_CONNECTION_FAILED') return failure(error.code, 'Connection through the selected proxy failed or timed out', true)
     return error.result || failure(phase, 'Protocol authorization failed at this step; check the proxy and provider response', true)
-  } finally { transport?.close() }
+  } finally { sentinel?.close(); transport?.close() }
 }

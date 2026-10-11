@@ -26,7 +26,7 @@ func TestReauthRunnerProtocolResultAndProgress(t *testing.T) {
 					t.Errorf("unexpected runner request")
 				}
 				var input ReauthRunnerTask
-				if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Mode != tc.mode || input.ResultType != tc.inputType {
+				if err := json.NewDecoder(r.Body).Decode(&input); err != nil || input.Mode != tc.mode || input.ResultType != tc.inputType || input.ResendAfterSeconds != 45 {
 					t.Errorf("wrong runner task: %+v, %v", input, err)
 				}
 				w.Header().Set("Content-Type", "application/x-ndjson")
@@ -39,7 +39,7 @@ func TestReauthRunnerProtocolResultAndProgress(t *testing.T) {
 			t.Setenv("ONE_CLICK_AUTH_RUNNER_TOKEN", "01234567890123456789012345678901")
 			var stages []string
 			result, err := ExecuteReauthRunner(context.Background(), ReauthRunnerTask{
-				Mode: tc.mode, ResultType: tc.inputType, OnProgress: func(stage string) { stages = append(stages, stage) },
+				Mode: tc.mode, ResultType: tc.inputType, ResendAfterSeconds: 45, OnProgress: func(stage string) { stages = append(stages, stage) },
 			})
 			if tc.wantError {
 				var execution *ReauthExecutionError

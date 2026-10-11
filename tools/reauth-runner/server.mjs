@@ -25,13 +25,14 @@ const server = http.createServer(async (request, response) => {
   }
   const finish = result => { if (!response.destroyed) response.end(JSON.stringify(result) + (streaming ? '\n' : '')) }
   response.on('close', () => { if (!response.writableEnded) controller.abort() })
-  const timer = setTimeout(() => controller.abort(new DOMException('Authorization deadline exceeded', 'TimeoutError')), 120000)
+  const timer = setTimeout(() => controller.abort(new DOMException('Authorization deadline exceeded', 'TimeoutError')), 600000)
   active++
   try {
     let body = ''
     for await (const chunk of request) { body += chunk; if (body.length > 65536) throw new Error('size') }
     const task = JSON.parse(body)
     if (typeof task.script !== 'string' || task.script.length > 16384 || !['code', 'auth_file'].includes(task.resultType) || !task.context?.loginEmail) throw new Error('task')
+    if (task.resendAfterSeconds !== undefined && (!Number.isInteger(task.resendAfterSeconds) || task.resendAfterSeconds < 10 || task.resendAfterSeconds > 90)) throw new Error('resend')
     if (task.operation) throw new Error('operation')
     if (task.mailbox) {
       const m = task.mailbox

@@ -9,13 +9,14 @@ scripts continue to return files directly without starting a login session.
 
 Only existing accounts are authorized. `/about-you`, signup and profile creation
 return `ACCOUNT_NOT_REGISTERED` without submitting registration data. CAPTCHA and
-Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`, preserving the
-HTTP status when available. Phone verification, passkeys, MFA and ambiguous
-workspace selection return `MANUAL_REQUIRED`. Password pages (including redirected
+unsatisfied Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`,
+preserving the HTTP status when available. Phone verification, passkeys, MFA and
+ambiguous workspace selection return `MANUAL_REQUIRED`. Password pages (including redirected
 pages) use `/api/accounts/passwordless/send-otp`, then mailbox code reading and
 `/api/accounts/email-otp/validate`. A return to the password page after sending
-returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted. No challenge
-solving is included. If the mailbox reader is still waiting after 30 seconds,
+returns `EMAIL_CODE_UNAVAILABLE`. No account password is submitted.
+If the mailbox reader is still waiting after the profile `email_resend_seconds`
+countdown (default 30, configurable from 10 to 90 seconds),
 the runner sends one `/api/accounts/email-otp/resend` request in the same session.
 It keeps the original UID snapshot and reader, and accepts the resend endpoint's
 `success: true` response. No repeated resend loop is used.
@@ -24,11 +25,18 @@ The readable protocol reference is `Wenfxl-Codex-Manager-v18.2.0`:
 `utils/auth_pipeline/register.py::run_oauth_only`, `oauth.py`, and
 `utils/email_providers/mail_service.py::get_oai_code`. Its mailbox readers use
 IMAP or HTTP APIs, not Playwright. Its `auth_core` is a compiled extension;
-`init_auth`/`generate_payload` are not included in this client. This is not a complete
-port of the reference's compiled Sentinel module. Provider security
-requirements may still prevent this client from reaching even the initial login
-step; email-code support does not resolve an authorization-entry security
-challenge.
+it is not loaded by this client. Instead, the runner downloads the official
+Sentinel SDK (`20260219f9f6`) into a task-local worker and uses its requirements,
+proof, Turnstile and Session Observer functions. Each email submission, OTP send,
+resend and validation gets fresh `authorize_continue` evidence. OAuth and Sentinel
+use the same curl session, selected proxy, device ID and Chrome 142 profile.
+SDK network traffic stays in the HTTP transport; SDK execution has a 10-second
+deadline. An unsupported SDK, malformed response or unsatisfied challenge stops
+the task instead of falling back to fabricated evidence. This is an independent
+protocol implementation, not a complete port of the compiled reference module.
+HTML error pages from successful OTP API responses are rejected; only actually
+empty responses retain the empty send/resend fallback. A Cloudflare challenge at
+the initial OAuth page can still stop authorization before Sentinel is reached.
 
 Run this optional service separately from Sub2API. Set `REAUTH_RUNNER_TOKEN` to a
 random value of at least 32 characters. Configure Sub2API with
@@ -55,7 +63,7 @@ return { type: 'error', error: {
 The `context` argument contains `accountId`, `loginEmail`, `since`, `apiURL`,
 `mailboxAddress`, and `secret`. Filter a shared mailbox by login recipient and
 task start time. Scripts execute once per task and have a 30-second deadline;
-protocol authorization has a 120-second deadline. Errors and timeouts terminate
+protocol authorization has a 600-second deadline. Errors and timeouts terminate
 the task. `retryable` informs the operator; it does not trigger automatic retries.
 
 For a native install, run `npm ci` and `npm start`. Node 24 is recommended.
@@ -78,7 +86,7 @@ address. The selected OAuth proxy does not route the IMAP mailbox connection.
 IMAP waiting uses the authorization profile `mailbox_wait_seconds` (default
 60, configurable from 30 to 90 seconds). Older clients fall back to
 `MAILBOX_WAIT_SECONDS` (default 60),
-subject to the overall 120-second authorization deadline. The IMAP child has a
+subject to the overall 600-second authorization deadline. The IMAP child has a
 190-second limit so it cannot truncate that wait at the script default of 30
 seconds. Custom code scripts retain their 30-second deadline. Reading does not
 mark or delete messages.

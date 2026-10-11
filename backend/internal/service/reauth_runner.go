@@ -34,13 +34,14 @@ type ReauthRunnerMailbox struct {
 }
 
 type ReauthRunnerTask struct {
-	OnProgress func(string)         `json:"-"`
-	Mailbox    *ReauthRunnerMailbox `json:"mailbox,omitempty"`
-	Mode       string               `json:"mode"`
-	Script     string               `json:"script"`
-	ResultType string               `json:"resultType"`
-	Context    map[string]any       `json:"context"`
-	ProxyURL   string               `json:"proxyURL,omitempty"`
+	ResendAfterSeconds int                  `json:"resendAfterSeconds,omitempty"`
+	OnProgress         func(string)         `json:"-"`
+	Mailbox            *ReauthRunnerMailbox `json:"mailbox,omitempty"`
+	Mode               string               `json:"mode"`
+	Script             string               `json:"script"`
+	ResultType         string               `json:"resultType"`
+	Context            map[string]any       `json:"context"`
+	ProxyURL           string               `json:"proxyURL,omitempty"`
 }
 
 type ReauthRunnerResult struct {
@@ -62,7 +63,7 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	if err != nil {
 		return nil, err
 	}
-	runCtx, cancel := context.WithTimeout(ctx, 125*time.Second)
+	runCtx, cancel := context.WithTimeout(ctx, 605*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(runCtx, http.MethodPost, endpoint+"/execute", bytes.NewReader(body))
 	if err != nil {
@@ -74,7 +75,7 @@ func ExecuteReauthRunner(ctx context.Context, task ReauthRunnerTask) (*ReauthRun
 	transport := http.DefaultTransport.(*http.Transport).Clone()
 	transport.Proxy = nil
 	defer transport.CloseIdleConnections()
-	client := &http.Client{Transport: transport, Timeout: 125 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	client := &http.Client{Transport: transport, Timeout: 605 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	resp, err := client.Do(req)
 	if err != nil {
 		if runCtx.Err() != nil {

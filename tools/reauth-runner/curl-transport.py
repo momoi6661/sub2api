@@ -2,8 +2,7 @@
 """Small JSON-lines curl_cffi transport used by the protocol runner.
 
 The process owns one curl_cffi Session and therefore keeps its cookie jar and
-browser TLS profile across the complete OAuth/OTP flow. It is deliberately a
-request transport only; it does not solve or bypass provider challenges.
+browser TLS profile across the complete OAuth/OTP/Sentinel flow.
 """
 
 import base64
@@ -39,6 +38,7 @@ def main() -> None:
                 timeout=float(item.get("timeout", 30)),
                 allow_redirects=False,
                 verify=True,
+                impersonate=item.get("impersonate", "chrome"),
             )
             try:
                 set_cookie = response.headers.get_list("set-cookie")

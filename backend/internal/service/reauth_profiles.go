@@ -39,6 +39,7 @@ type ReauthProfile struct {
 	SenderFilter       string  `json:"sender_filter"`
 	CodePattern        string  `json:"code_pattern"`
 	MailboxWaitSeconds int     `json:"mailbox_wait_seconds"`
+	EmailResendSeconds int     `json:"email_resend_seconds"`
 	ProxyID            *int64  `json:"proxy_id"`
 	ProxyIDs           []int64 `json:"proxy_ids"`
 	Secret             string  `json:"secret,omitempty"`
@@ -68,6 +69,9 @@ func (s *SettingService) ListReauthProfiles(ctx context.Context) ([]ReauthProfil
 		if stored.MailboxWaitSeconds == 0 {
 			stored.MailboxWaitSeconds = 60
 		}
+		if stored.EmailResendSeconds == 0 {
+			stored.EmailResendSeconds = 30
+		}
 		stored.Secret = ""
 		stored.CodeScript = ""
 		stored.HasCodeScript = stored.EncryptedScript != ""
@@ -92,6 +96,12 @@ func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profi
 	}
 	if profile.MailboxWaitSeconds < 30 || profile.MailboxWaitSeconds > 90 {
 		return bad("mailbox wait must be between 30 and 90 seconds")
+	}
+	if profile.EmailResendSeconds == 0 {
+		profile.EmailResendSeconds = 30
+	}
+	if profile.EmailResendSeconds < 10 || profile.EmailResendSeconds > 90 {
+		return bad("email resend countdown must be between 10 and 90 seconds")
 	}
 	profile.Name = strings.TrimSpace(profile.Name)
 	profile.MailboxAddress = strings.TrimSpace(profile.MailboxAddress)

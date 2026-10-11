@@ -169,7 +169,7 @@ func (h *AccountHandler) authorizeRecorded(ctx context.Context, id int64, source
 }
 
 func (h *AccountHandler) executeQueuedAuthorization(parent context.Context, task *service.AuthorizationTask) {
-	ctx, cancel := context.WithTimeout(parent, 135*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
 	h.authTaskControllers.Store(task.ID, cancel)
 	defer h.authTaskControllers.Delete(task.ID)
 	defer cancel()

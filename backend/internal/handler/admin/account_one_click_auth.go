@@ -76,7 +76,7 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 	if h.reauthSettings == nil {
 		return nil, &service.ReauthExecutionError{Code: "RUNNER_NOT_CONFIGURED", Message: "Authorization settings unavailable"}
 	}
-	ctx, cancel := context.WithTimeout(parent, 135*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 10*time.Minute)
 	defer cancel()
 	if h.reauthLocks != nil {
 		var nonce [16]byte
@@ -84,7 +84,7 @@ func (h *AccountHandler) authorizeOneClick(parent context.Context, id int64) (*s
 			return nil, err
 		}
 		owner, key := hex.EncodeToString(nonce[:]), fmt.Sprintf("one_click_auth_task:%d", id)
-		acquired, err := h.reauthLocks.TryAcquireLeaderLock(ctx, key, owner, 150*time.Second)
+		acquired, err := h.reauthLocks.TryAcquireLeaderLock(ctx, key, owner, 11*time.Minute)
 		if err != nil {
 			return nil, &service.ReauthExecutionError{Code: "TASK_LOCK_UNAVAILABLE", Message: "Authorization task lock unavailable", Retryable: true}
 		}
@@ -144,7 +144,7 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 		writeReauthError(c, &service.ReauthExecutionError{Code: "RUNNER_NOT_CONFIGURED", Message: "Authorization settings unavailable"})
 		return
 	}
-	ctx, cancel := context.WithTimeout(startAuthProgress(c), 135*time.Second)
+	ctx, cancel := context.WithTimeout(startAuthProgress(c), 10*time.Minute)
 	ctx, taskCancel := context.WithCancel(ctx)
 	defer cancel()
 	defer taskCancel()
@@ -185,7 +185,7 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 			return
 		}
 		owner := hex.EncodeToString(nonce[:])
-		acquired, err := h.reauthLocks.TryAcquireLeaderLock(ctx, key, owner, 150*time.Second)
+		acquired, err := h.reauthLocks.TryAcquireLeaderLock(ctx, key, owner, 11*time.Minute)
 		if err != nil || !acquired {
 			execution := &service.ReauthExecutionError{Code: "TASK_ALREADY_RUNNING", Message: "This email already has an authorization task"}
 			if err != nil {
@@ -242,7 +242,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if profile.MailboxMode == "imap" || resultType == "" {
 		resultType = "code"
 	}
-	task := service.ReauthRunnerTask{Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
+	task := service.ReauthRunnerTask{ResendAfterSeconds: profile.EmailResendSeconds, Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
 		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
 	task.OnProgress = func(stage string) { authProgress(ctx, stage) }

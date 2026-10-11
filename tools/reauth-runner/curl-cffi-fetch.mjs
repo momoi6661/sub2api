@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { normalizeProxyURL } from './proxy-url.mjs'
+import { browserHeaders, browserProfile } from './browser-profile.mjs'
 
 function responseFrom(payload) {
   const headers = new Map(Object.entries(payload.headers || {}))
@@ -59,11 +60,11 @@ export function createCurlCffiFetch(proxyURL = '') {
   const fetch = async (url, options = {}) => {
     if (closed) throw new Error('curl_cffi transport is closed')
     const id = randomUUID()
-    const headers = { ...(options.headers || {}) }
+    const headers = { ...browserHeaders, ...(options.headers || {}) }
     const body = options.body == null ? null : String(options.body)
     const timeout = options.signal ? undefined : 30
     const result = new Promise((resolve, reject) => pending.set(id, { resolve, reject }))
-    child.stdin.write(JSON.stringify({ id, url, method: options.method || 'GET', headers, body, proxy: proxyURL, timeout }) + '\n')
+    child.stdin.write(JSON.stringify({ id, url, method: options.method || 'GET', headers, body, proxy: proxyURL, timeout, impersonate: browserProfile }) + '\n')
     if (options.signal) {
       const abort = () => {
         const waiter = pending.get(id)

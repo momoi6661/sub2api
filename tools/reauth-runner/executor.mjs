@@ -21,7 +21,7 @@ export function executeScript(task, { timeout = 30_000, signal } = {}) {
       child.kill(); resolve(result)
     }
     const abort = () => finish(interrupted(signal))
-    const timer = setTimeout(() => finish(failure('SCRIPT_TIMEOUT', 'Script exceeded 30 seconds', true)), timeout)
+    const timer = setTimeout(() => finish(failure('SCRIPT_TIMEOUT', `Script exceeded ${timeout / 1000} seconds`, true)), timeout)
     signal?.addEventListener('abort', abort, { once: true })
     child.on('error', () => finish(failure('EXECUTOR_UNAVAILABLE', 'Code executor unavailable')))
     child.stdin.on('error', () => finish(failure('EXECUTOR_UNAVAILABLE', 'Code executor unavailable')))

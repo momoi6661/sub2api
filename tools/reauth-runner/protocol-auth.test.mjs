@@ -5,6 +5,7 @@ import { Response } from 'node-fetch'
 import { authorizeWithProtocol } from './protocol-auth.mjs'
 import { executeScript } from './executor.mjs'
 import { matchMailboxMessage } from './imap-code.mjs'
+import { sentinelSDK } from './sentinel-fixture.mjs'
 
 const origin = 'https://auth.openai.com'
 const callback = 'http://localhost:1455/auth/callback'
@@ -15,12 +16,24 @@ const makeTask = (context = {}) => ({ mode: 'oauth_protocol', resultType: 'code'
 
 // Emulates a provider across real cookie/session boundaries; no live credentials.
 function provider(options = {}) {
-  let auth, sentCode = false
+  let auth, sentCode = false, sentinelCalls = 0, deviceID
   const requests = [], stages = [], reads = []
   const fetch = async (target, init) => {
     const url = new URL(target)
     requests.push({ url, init })
     assert.equal(init.redirect, 'manual')
+    if (url.origin === 'https://sentinel.openai.com') {
+      assert.equal(init.headers.Cookie, undefined, 'OAuth cookies must not be forwarded to Sentinel')
+      if (url.pathname.endsWith('/sdk.js')) return new Response(sentinelSDK, { headers: { 'content-type': 'application/javascript' } })
+      assert.equal(url.pathname, '/backend-api/sentinel/req')
+      const payload = JSON.parse(init.body)
+      assert.equal(payload.flow, 'authorize_continue')
+      assert.equal(payload.p, 'gAAAAACrequirements')
+      deviceID ||= payload.id
+      assert.equal(payload.id, deviceID)
+      return json({ token: `challenge-${++sentinelCalls}`, proofofwork: { required: true },
+        turnstile: { required: true, dx: 'fixture-challenge' }, so: { required: true } })
+    }
     assert.equal(url.origin, origin)
     if (url.pathname === '/oauth/authorize') {
       auth = url
@@ -30,9 +43,23 @@ function provider(options = {}) {
       if (options.challenge) return new Response('<title>Just a moment</title>', { status: 403 })
       return redirect('/log-in')
     }
-    if (url.pathname === '/log-in') return new Response('<html><script src="/sentinel.js"></script>Log in</html>', { headers: { 'set-cookie': 'login_session=fresh; Secure; HttpOnly; Path=/' } })
+    if (url.pathname === '/log-in') {
+      const response = new Response('<html><script src="/sentinel.js"></script>Log in</html>', { headers: { 'set-cookie': 'login_session=fresh; Secure; HttpOnly; Path=/' } })
+      response.headers.append('set-cookie', 'oai-did=test-device; Secure; Path=/')
+      return response
+    }
     assert.match(init.headers.Cookie || '', /login_session=fresh/)
     if (init.method === 'POST' && url.pathname.startsWith('/api/')) assert.equal(init.headers.Origin, origin)
+    if (init.method === 'POST' && /authorize\/continue|send-otp|email-otp/.test(url.pathname)) {
+      const sentinel = JSON.parse(init.headers['openai-sentinel-token'])
+      assert.equal(sentinel.c, `challenge-${sentinelCalls}`, 'each protected step needs fresh evidence')
+      assert.equal(sentinel.p, `gAAAAABproof-${sentinel.c}`)
+      assert.equal(sentinel.id, init.headers['oai-device-id'])
+      assert.equal(sentinel.id, deviceID)
+      assert.equal(sentinel.t, 'turnstile-evidence')
+      assert.equal(JSON.parse(init.headers['openai-sentinel-so-token']).c, sentinel.c)
+      assert.match(init.headers.Cookie, new RegExp(`oai-did=${deviceID}`))
+    }
     if (url.pathname === '/api/accounts/authorize/continue') {
       assert.deepEqual(JSON.parse(init.body), { username: { value: 'owner@example.com', kind: 'email' } })
       if (options.signup) return json({ continue_url: '/about-you' })
@@ -50,6 +77,7 @@ function provider(options = {}) {
       if (init.headers.Referer.endsWith('/log-in/password')) assert.equal(init.headers['oai-device-id'], 'test-device')
       else assert.equal(init.headers.Referer, origin + '/email-verification')
       if (options.sendRejected) return new Response('private credentials', { status: 403 })
+      if (options.htmlSendResponse) return new Response('<html>Provider error</html>', { headers: { 'content-type': 'text/html' } })
       if (options.codeUnavailable) return json({ continue_url: '/log-in/password' })
       sentCode = true
       if (options.emptySendResponse) return new Response(null)
@@ -133,7 +161,7 @@ test('IMAP captures a new UID boundary before protocol login', async () => {
   assert.equal(task.mailbox.minUID, undefined, 'input task must not be mutated')
 })
 
-test('resends once after 30 seconds while keeping the mailbox reader and snapshot', async t => {
+for (const seconds of [30, 45]) test(`resends once after ${seconds} seconds while keeping the mailbox reader and snapshot`, async t => {
   t.mock.timers.enable({ apis: ['setTimeout'] })
   const mock = provider()
   let started, deliver
@@ -153,9 +181,9 @@ test('resends once after 30 seconds while keeping the mailbox reader and snapsho
     if (new URL(url).pathname === '/api/accounts/email-otp/resend') deliver({ type: 'code', code: '123456' })
     return response
   }
-  const pending = authorizeWithProtocol({ ...makeTask(), mailbox: { host: 'imap.example.com' } }, reader, undefined, mock.report, fetch)
+  const pending = authorizeWithProtocol({ ...makeTask(), ...(seconds === 30 ? {} : { resendAfterSeconds: seconds }), mailbox: { host: 'imap.example.com' } }, reader, undefined, mock.report, fetch)
   await ready
-  t.mock.timers.tick(29999)
+  t.mock.timers.tick(seconds * 1000 - 1)
   assert.equal(mock.requests.filter(r => r.url.pathname.endsWith('/resend')).length, 0)
   t.mock.timers.tick(1)
   assert.equal((await pending).type, 'auth_file')
@@ -173,6 +201,14 @@ test('successful empty OTP send response continues to email verification', async
   const mock = provider({ password: true, emptySendResponse: true })
   assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
   assert.equal(mock.reads.length, 1)
+})
+
+test('HTML from an OTP API is rejected before waiting for an email', async () => {
+  const mock = provider({ password: true, htmlSendResponse: true })
+  const result = await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.error.code, 'PROVIDER_INVALID_RESPONSE')
+  assert.equal(result.error.httpStatus, 200)
+  assert.equal(mock.reads.length, 0)
 })
 
 test('redirected password page switches to email code using its session cookies', async () => {
@@ -303,4 +339,23 @@ test('cancelling a mailbox script terminates its child process promptly', async 
   const result = executeScript({ ...makeTask(), script: 'await new Promise(() => {});' }, { signal: controller.signal })
   controller.abort()
   assert.equal((await result).error.code, 'TASK_CANCELLED')
+})
+
+for (const ending of ['success', 'failure', 'cancel', 'deadline']) test(`${ending} clears the pending email resend and aborts the reader`, async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const mock = provider(), controller = new AbortController()
+  let readerSignal
+  const reader = async (_task, options) => {
+    readerSignal = options.signal
+    if (ending === 'cancel') controller.abort()
+    if (ending === 'deadline') controller.abort(new DOMException('deadline', 'TimeoutError'))
+    return ending === 'failure' ? { type: 'error', error: { code: 'MAILBOX_UNAVAILABLE', message: 'unavailable' } } : { type: 'code', code: '123456' }
+  }
+  const result = await authorizeWithProtocol(makeTask(), reader, controller.signal, mock.report, mock.fetch)
+  if (ending === 'success') assert.equal(result.type, 'auth_file')
+  else assert.equal(result.error.code, { failure: 'MAILBOX_UNAVAILABLE', cancel: 'TASK_CANCELLED', deadline: 'AUTH_TIMEOUT' }[ending])
+  assert.ok(readerSignal.aborted)
+  t.mock.timers.tick(600000)
+  await Promise.resolve()
+  assert.equal(mock.requests.some(r => r.url.pathname.endsWith('/resend')), false)
 })

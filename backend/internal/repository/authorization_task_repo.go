@@ -79,7 +79,7 @@ func (r *authorizationTaskRepository) Create(ctx context.Context, tasks []*servi
 	return tx.Commit()
 }
 
-const expireAuthTasks = `UPDATE authorization_tasks SET status='failed', error_code='TASK_INTERRUPTED', error_message='Task timed out or the server stopped. Retry manually.', finished_at=started_at + INTERVAL '150 seconds' WHERE status='running' AND started_at < NOW() - INTERVAL '150 seconds'`
+const expireAuthTasks = `UPDATE authorization_tasks SET status='failed', error_code='TASK_INTERRUPTED', error_message='Task timed out or the server stopped. Retry manually.', finished_at=started_at + INTERVAL '660 seconds' WHERE status='running' AND started_at < NOW() - INTERVAL '660 seconds'`
 
 func (r *authorizationTaskRepository) Claim(ctx context.Context) (*service.AuthorizationTask, error) {
 	if _, err := r.db.ExecContext(ctx, expireAuthTasks); err != nil {

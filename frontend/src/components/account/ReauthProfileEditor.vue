@@ -46,6 +46,7 @@
       </div>
       <div v-if="form.mailbox_mode === 'imap'"><label for="auth-profile-pattern" class="input-label">{{ t('admin.accounts.authProfiles.pattern') }}</label><input id="auth-profile-pattern" v-model="form.code_pattern" class="input font-mono" required /><p class="input-hint">{{ t('admin.accounts.authProfiles.isolation') }}</p></div>
       <div v-if="form.mailbox_mode === 'imap'"><label for="auth-profile-wait" class="input-label">{{ t('admin.accounts.authProfiles.waitSeconds') }}</label><input id="auth-profile-wait" v-model.number="form.mailbox_wait_seconds" class="input" type="number" min="30" max="90" step="1" required /><p class="input-hint">{{ t('admin.accounts.authProfiles.waitHint') }}</p></div>
+      <div v-if="form.mailbox_mode === 'imap' || form.api_result_type === 'code'"><label for="auth-profile-resend" class="input-label">{{ t('admin.accounts.authProfiles.resendSeconds') }}</label><input id="auth-profile-resend" v-model.number="form.email_resend_seconds" class="input" type="number" min="10" max="90" step="1" required /><p class="input-hint">{{ t('admin.accounts.authProfiles.resendHint') }}</p></div>
       <div><label class="input-label">{{ t('admin.accounts.authProfiles.proxy') }}</label><div class="max-h-48 space-y-2 overflow-y-auto rounded-lg border border-gray-200 p-3 dark:border-dark-600"><label v-for="proxy in proxies" :key="proxy.id" class="flex items-center gap-2 text-sm"><input v-model="form.proxy_ids" type="checkbox" :value="proxy.id" />{{ proxy.name }}</label><p v-if="!proxies.length" class="input-hint">{{ t('admin.accounts.authProfiles.noProxies') }}</p></div><p class="input-hint">{{ t('admin.accounts.authProfiles.proxyHint') }}</p></div>
       <p v-if="error" role="alert" class="text-sm text-red-600">{{ error }}</p><p v-if="errorCode" class="text-sm text-red-600">{{ errorCode }} · {{ t(errorRetryable ? 'admin.accounts.authProfiles.retryable' : 'admin.accounts.authProfiles.notRetryable') }}</p>
     </form>
@@ -73,7 +74,7 @@ const resultTypeOptions = computed(() => [
   { value: 'code', label: t('admin.accounts.authProfiles.codeResult') },
   { value: 'auth_file', label: t('admin.accounts.authProfiles.fileResult') }
 ])
-const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbox_mode: 'imap', api_result_type: 'code', mailbox_address: '', imap_host: '', imap_port: 993, imap_username: '', api_url: '', code_script: '', has_code_script: false, folder: 'INBOX', sender_filter: '', mailbox_wait_seconds: 60, code_pattern: '(\\d{6})', proxy_id: null, proxy_ids: [], secret: '', has_secret: false })
+const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbox_mode: 'imap', api_result_type: 'code', mailbox_address: '', imap_host: '', imap_port: 993, imap_username: '', api_url: '', code_script: '', has_code_script: false, folder: 'INBOX', sender_filter: '', mailbox_wait_seconds: 60, email_resend_seconds: 30, code_pattern: '(\\d{6})', proxy_id: null, proxy_ids: [], secret: '', has_secret: false })
 const form = ref(defaults())
 const proxies = ref<Proxy[]>([])
 const saving = ref(false)
@@ -106,7 +107,7 @@ watch(() => props.show, async show => {
   showSecret.value = false
   testAbort?.abort(); testResult.value = ''; testEmail.value = ''
   if (!show) { form.value.secret = ''; form.value.code_script = ''; return }
-  form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: props.profile.mailbox_wait_seconds || 60, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '' } : defaults()
+  form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: props.profile.mailbox_wait_seconds || 60, email_resend_seconds: props.profile.email_resend_seconds || 30, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '' } : defaults()
   error.value = ''; errorCode.value = ''
   try { proxies.value = await getAll() } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
 })

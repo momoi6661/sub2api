@@ -18,13 +18,16 @@
         <label for="auth-profile-result" class="input-label">{{ t('admin.accounts.authProfiles.resultType') }}</label>
         <Select id="auth-profile-result" v-model="form.api_result_type" :options="resultTypeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.resultType')" />
         <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
+        <div class="rounded-lg border border-primary-200 bg-primary-50 p-3 text-sm text-primary-900 dark:border-primary-900/60 dark:bg-primary-950/30 dark:text-primary-100">
+          <p class="font-semibold">{{ t('admin.accounts.authProfiles.customParamsTitle') }}</p>
+          <p class="mt-1 whitespace-pre-line text-xs leading-5">{{ t('admin.accounts.authProfiles.customParamsDescription') }}</p>
+        </div>
+        <label for="auth-profile-test-input" class="input-label">{{ t('admin.accounts.authProfiles.customInput') }}</label>
+        <textarea id="auth-profile-test-input" v-model="form.custom_input" class="input min-h-24 font-mono" maxlength="16384" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />
         <label for="auth-profile-script" class="input-label">{{ t('admin.accounts.authProfiles.script') }}</label>
         <textarea id="auth-profile-script" v-model="form.code_script" class="input min-h-48 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="scriptExample" />
         <p class="input-hint">{{ t(form.has_code_script ? 'admin.accounts.authProfiles.scriptKeep' : 'admin.accounts.authProfiles.scriptHint') }}</p>
         <ReauthScriptRules />
-        <label for="auth-profile-test-input" class="input-label">{{ t('admin.accounts.authProfiles.customInput') }}</label>
-        <textarea id="auth-profile-test-input" v-model="form.custom_input" class="input font-mono" maxlength="16384" />
-        <p class="input-hint">{{ t('admin.accounts.authProfiles.customInputDescription') }}</p>
         <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
         <div v-if="testResult" role="status" class="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
           <p>{{ t('admin.accounts.authProfiles.testSuccess') }}</p>

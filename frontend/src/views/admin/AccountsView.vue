@@ -13,20 +13,20 @@
             @update:searchQuery="debouncedReload"
           />
           <AccountTableActions
-            :loading="loading"
+            :loading="loading || manualRefreshing || refreshingAccountIDs.size > 0"
             @refresh="handleManualRefresh"
             @create="showCreate = true"
           >
             <template #after>
-              <label class="btn btn-secondary gap-2 px-2 md:px-3" :title="t('admin.accounts.refreshSubscriptionHint')">
-                <input
-                  type="checkbox"
-                  :checked="subscriptionRefreshEnabled"
-                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
-                  @change="setSubscriptionRefreshEnabled(($event.target as HTMLInputElement).checked)"
+              <div class="inline-flex min-h-[38px] shrink-0 items-center gap-2 rounded-lg border border-gray-200 bg-white px-2 py-1.5 dark:border-dark-600 dark:bg-dark-800" :title="t('admin.accounts.refreshSubscriptionHint')">
+                <Toggle
+                  data-testid="subscription-refresh-toggle"
+                  :model-value="subscriptionRefreshEnabled"
+                  :aria-label="t('admin.accounts.refreshSubscription')"
+                  @update:model-value="setSubscriptionRefreshEnabled"
                 />
-                <span class="text-xs md:text-sm">{{ t('admin.accounts.refreshSubscription') }}</span>
-              </label>
+                <span class="whitespace-nowrap text-xs text-gray-700 dark:text-gray-200 md:text-sm">{{ t('admin.accounts.refreshSubscription') }}</span>
+              </div>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
                 <button
@@ -264,6 +264,7 @@
               </span>
               <AccountSubscriptionExpiry
                 v-if="row.platform === 'openai' && row.type === 'oauth' && getAccountPlanType(row) !== 'free'"
+                :ref="el => setSubscriptionRef(row.id, el)"
                 :account-id="row.id"
                 :enabled="subscriptionRefreshEnabled"
                 :refresh-key="subscriptionRefreshToken"
@@ -333,6 +334,7 @@
           </template>
           <template #cell-usage="{ row }">
             <AccountUsageCell
+              :ref="el => setUsageRef(row.id, el)"
               :account="row"
               :today-stats="todayStatsByAccountId[String(row.id)] ?? null"
               :today-stats-loading="todayStatsLoading"
@@ -453,7 +455,19 @@
             </div>
           </template>
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1">
+            <div class="flex flex-wrap items-center gap-1">
+              <button
+                type="button"
+                data-testid="refresh-account-button"
+                :title="t('admin.accounts.refreshAccountHint')"
+                :aria-label="t('admin.accounts.refreshAccountHint')"
+                :disabled="manualRefreshing || refreshingAccountIDs.has(row.id)"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-primary-600 transition-colors hover:bg-primary-50 disabled:cursor-wait disabled:opacity-50 dark:text-primary-400 dark:hover:bg-primary-900/20"
+                @click.stop="handleRefreshAccount(row)"
+              >
+                <Icon name="refresh" size="sm" :class="refreshingAccountIDs.has(row.id) && 'animate-spin'" />
+                <span class="text-xs">{{ t('common.refresh') }}</span>
+              </button>
               <button
                 v-if="canOneClickAuthorize(row)"
                 :title="t('admin.accounts.oneClickAuth.title')"
@@ -572,6 +586,7 @@ import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
 import UpstreamBillingRateCell from '@/components/account/UpstreamBillingRateCell.vue'
 import AccountPriorityCell from '@/components/account/AccountPriorityCell.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
+import Toggle from '@/components/common/Toggle.vue'
 import AccountSubscriptionExpiry from '@/components/account/AccountSubscriptionExpiry.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
@@ -759,6 +774,20 @@ const todayStatsReqSeq = ref(0)
 const pendingTodayStatsRefresh = ref(false)
 const usageManualRefreshToken = ref(0)
 const subscriptionRefreshToken = ref(0)
+const refreshingAccountIDs = reactive(new Set<number>())
+const manualRefreshing = ref(false)
+type RefreshableAccountCell = { refresh: () => Promise<void> }
+const usageRefs = new Map<number, RefreshableAccountCell>()
+const subscriptionRefs = new Map<number, RefreshableAccountCell>()
+const setUsageRef = (id: number, cell: unknown) => {
+  if (cell) usageRefs.set(id, cell as RefreshableAccountCell)
+  else usageRefs.delete(id)
+}
+const setSubscriptionRef = (id: number, cell: unknown) => {
+  if (cell) subscriptionRefs.set(id, cell as RefreshableAccountCell)
+  else subscriptionRefs.delete(id)
+}
+
 
 const desktopViewportQuery = '(min-width: 768px)'
 const isDesktopViewport = ref(
@@ -1547,8 +1576,10 @@ const refreshAccountsIncrementally = async () => {
     upstreamBillingNow.value = Date.now()
 
     await refreshTodayStatsBatch()
-    // The subscription toggle is independent of list polling, including a list 304.
-    if (subscriptionRefreshEnabled.value) subscriptionRefreshToken.value += 1
+    // Automatic refresh uses the existing usage cache instead of forcing upstream probes.
+    if (isDesktopViewport.value) {
+      for (const account of accounts.value) queueBatchedUsage(account)
+    }
   } catch (error) {
     console.error('Auto refresh failed:', error)
   } finally {
@@ -1557,11 +1588,25 @@ const refreshAccountsIncrementally = async () => {
 }
 
 const handleManualRefresh = async () => {
-  await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
-  // Force usage cells to refetch /usage on explicit user refresh.
-  usageManualRefreshToken.value += 1
-  if (subscriptionRefreshEnabled.value) subscriptionRefreshToken.value += 1
-  await refreshVisibleUsageBatch()
+  if (manualRefreshing.value || refreshingAccountIDs.size > 0) return
+  manualRefreshing.value = true
+  try {
+    // Force one existing batch query, then read persisted account state once.
+    if (isDesktopViewport.value) {
+      await refreshVisibleUsageBatch()
+      await Promise.allSettled(accounts.value
+        .filter(account => !accountSupportsBatchUsage(account))
+        .map(account => usageRefs.get(account.id)?.refresh()))
+    } else {
+      await Promise.allSettled(accounts.value.map(account => usageRefs.get(account.id)?.refresh()))
+    }
+    await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
+    if (subscriptionRefreshEnabled.value) {
+      subscriptionRefreshToken.value += 1
+    }
+  } finally {
+    manualRefreshing.value = false
+  }
 }
 
 const loadUpstreamBillingProbeGlobalState = async () => {
@@ -2519,6 +2564,64 @@ const handleDuplicateAccount = async (a: Account) => {
     duplicatingAccountIDs.delete(a.id)
   }
 }
+// Reuse existing usage queries; never refresh credentials or reset quota here.
+const handleRefreshAccount = async (account: Account) => {
+  if (manualRefreshing.value || refreshingAccountIDs.has(account.id)) return
+  refreshingAccountIDs.add(account.id)
+  const id = account.id
+  const key = String(id)
+  try {
+    const refreshUsage = async () => {
+      if (!isDesktopViewport.value) {
+        await usageRefs.get(id)?.refresh()
+        return
+      }
+      if (!accountSupportsBatchUsage(account)) {
+        await usageRefs.get(id)?.refresh()
+        return
+      }
+      usageBatchCache.delete(id)
+      const token = (usageBatchRequestTokenByAccountId.value[key] ?? 0) + 1
+      usageBatchRequestTokenByAccountId.value[key] = token
+      setUsageBatchLoading(id, true)
+      try {
+        const result = await adminAPI.accounts.getBatchUsage([id], true)
+        if (usageBatchRequestTokenByAccountId.value[key] !== token) return
+        const usage = result.usage?.[key] ?? null
+        const error = result.errors?.[key] ?? null
+        setUsageBatchState(id, usage, error)
+        if (usage) usageBatchCache.set(id, { data: usage, ts: Date.now() })
+        if (error) throw new Error(error)
+        if (usage?.needs_reauth) appStore.showWarning(t('admin.accounts.refreshAccountNeedsReauth'))
+      } finally {
+        if (usageBatchRequestTokenByAccountId.value[key] === token) setUsageBatchLoading(id, false)
+      }
+    }
+    const results = await Promise.allSettled([
+      refreshUsage(),
+      subscriptionRefs.has(id)
+        ? subscriptionRefs.get(id)!.refresh()
+        : account.platform === 'openai' && account.type === 'oauth'
+          ? adminAPI.accounts.getSubscription(id, true)
+          : Promise.resolve(),
+      adminAPI.accounts.getBatchTodayStats([id]).then(result => {
+        todayStatsByAccountId.value = {
+          ...todayStatsByAccountId.value,
+          [key]: result.stats?.[key] ?? buildDefaultTodayStats()
+        }
+      })
+    ])
+    // Read after upstream probing so persisted quota/reset/status changes are visible.
+    patchAccountInList(await adminAPI.accounts.getById(id))
+    const failed = results.find(result => result.status === 'rejected')
+    if (failed?.status === 'rejected') throw failed.reason
+  } catch (error: any) {
+    appStore.showError(error?.message || t('admin.accounts.refreshAccountFailed'))
+  } finally {
+    refreshingAccountIDs.delete(id)
+  }
+}
+
 const handleRefresh = async (a: Account) => {
   try {
     const result = await adminAPI.accounts.refreshCredentials(a.id)

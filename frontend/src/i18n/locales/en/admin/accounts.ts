@@ -395,14 +395,17 @@ export default {
       setPrivacy: 'Set Privacy',
       subscriptionAbnormal: 'Abnormal',
       subscriptionExpires: 'Expires',
+      refreshAccountHint: 'Refresh this account’s usage, reset times, subscription and status',
+      refreshAccountNeedsReauth: 'Account authorization is invalid. Please authorize again.',
+      refreshAccountFailed: 'Some account information could not be refreshed',
       subscriptionExpiryDate: 'Subscription expires:',
       subscriptionRemainingDays: '{days} days remaining',
       subscriptionExpired: 'Subscription expired',
       subscriptionExpiryUnavailable: 'Subscription expiry unavailable',
       subscriptionExpiryLoading: 'Querying subscription expiry…',
-      subscriptionExpiryDisabled: 'Enable Refresh subscription above to query expiry',
+      subscriptionExpiryDisabled: 'Refresh this account, or enable Refresh subscription and manually refresh the list',
       refreshSubscription: 'Refresh subscription',
-      refreshSubscriptionHint: 'Query subscription expiry on manual or automatic list refresh. Disable to keep the result without further requests.',
+      refreshSubscriptionHint: 'Include subscriptions when manually refreshing the list; automatic refresh does not query subscriptions',
       // Capacity status tooltips
       capacity: {
         windowCost: {

@@ -6,8 +6,9 @@
         {{ expired ? t('admin.accounts.subscriptionExpired') : t('admin.accounts.subscriptionRemainingDays', { days: remainingDays }) }}
       </div>
     </template>
-    <div v-else class="text-gray-400 dark:text-gray-500">
-      {{ t(loading ? 'admin.accounts.subscriptionExpiryLoading' : !enabled && !queried ? 'admin.accounts.subscriptionExpiryDisabled' : 'admin.accounts.subscriptionExpiryUnavailable') }}
+    <div v-if="queryError" class="text-red-600 dark:text-red-400" role="status">{{ queryError }}</div>
+    <div v-else-if="!expiry" class="text-gray-400 dark:text-gray-500">
+      {{ t(loading ? 'admin.accounts.subscriptionExpiryLoading' : !queried ? 'admin.accounts.subscriptionExpiryDisabled' : 'admin.accounts.subscriptionExpiryUnavailable') }}
     </div>
   </div>
 </template>
@@ -24,22 +25,26 @@ const now = useNow({ interval: 60_000 })
 const rootRef = ref<HTMLElement | null>(null)
 const expiresAt = ref('')
 const loading = ref(false)
+const queryError = ref('')
 let visible = false
 let observer: IntersectionObserver | null = null
 let request: AbortController | null = null
 const queried = ref(false)
-let pendingForce = (props.refreshKey ?? 0) > 0
+let pendingForce = false
 
-async function loadSubscription(force = false) {
-  if (!props.enabled || !visible || request || props.accountId < 1) return
+async function loadSubscription(force = false, manual = false) {
+  if ((!manual && (!props.enabled || !visible)) || request || props.accountId < 1) return
   const currentRequest = new AbortController()
   request = currentRequest
   loading.value = true
+  queryError.value = ''
   try {
     const result = await getSubscription(props.accountId, force, currentRequest.signal)
     if (request === currentRequest) expiresAt.value = result.subscription_expires_at
-  } catch {
+  } catch (error: any) {
+    if (request === currentRequest) queryError.value = error?.message || t('admin.accounts.refreshAccountFailed')
     // Keep a previously queried date during a transient request failure.
+    if (manual) throw error
   } finally {
     if (request === currentRequest) {
       queried.value = true
@@ -50,15 +55,17 @@ async function loadSubscription(force = false) {
   }
 }
 
+defineExpose({ refresh: () => loadSubscription(true, true) })
+
 onMounted(() => {
   if (typeof IntersectionObserver === 'undefined') {
     visible = true
-    void loadSubscription(pendingForce)
+    if (pendingForce) void loadSubscription(true)
     return
   }
   observer = new IntersectionObserver((entries) => {
     visible = entries.some(entry => entry.isIntersecting)
-    if (visible && (!queried.value || pendingForce)) void loadSubscription(pendingForce)
+    if (visible && pendingForce) void loadSubscription(true)
   }, { rootMargin: '100px 0px' })
   if (rootRef.value) observer.observe(rootRef.value)
 })
@@ -66,21 +73,17 @@ watch(() => [props.accountId, props.refreshKey], (next, previous) => {
   const identityChanged = next[0] !== previous[0]
   request?.abort()
   request = null
-  if (identityChanged) expiresAt.value = ''
+  if (identityChanged) {
+    expiresAt.value = ''
+    queryError.value = ''
+  }
   queried.value = false
-  pendingForce = !identityChanged
+  pendingForce = next[1] !== previous[1] && props.enabled
   loading.value = false
-  void loadSubscription(pendingForce)
+  if (pendingForce) void loadSubscription(true)
 })
 watch(() => props.enabled, (enabled) => {
-  if (enabled) {
-    pendingForce = true
-    void loadSubscription(true)
-  } else {
-    request?.abort()
-    request = null
-    loading.value = false
-  }
+  if (!enabled) pendingForce = false
 })
 onBeforeUnmount(() => {
   observer?.disconnect()

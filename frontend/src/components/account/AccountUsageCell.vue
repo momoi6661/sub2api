@@ -1445,6 +1445,15 @@ const loadUsage = async (options?: { source?: 'passive' | 'active'; bypassCache?
   }
 }
 
+defineExpose({ refresh: async () => {
+  await loadUsage({
+    source: isAnthropicOAuthOrSetupToken.value ? 'passive' : undefined,
+    bypassCache: true
+  })
+  if (error.value) throw new Error(error.value)
+  if (usageInfo.value?.needs_reauth) throw new Error(t('admin.accounts.refreshAccountNeedsReauth'))
+} })
+
 const flushPendingAutoLoad = () => {
   if (!pendingAutoLoad.value) return
   const source = pendingAutoLoadSource.value

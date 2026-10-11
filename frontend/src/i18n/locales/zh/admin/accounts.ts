@@ -236,14 +236,17 @@ export default {
       setPrivacy: '设置隐私',
       subscriptionAbnormal: '异常',
       subscriptionExpires: '到期',
+      refreshAccountHint: '刷新此账号的额度、重置时间、订阅和状态',
+      refreshAccountNeedsReauth: '账号授权已失效，请重新授权',
+      refreshAccountFailed: '账号部分信息刷新失败',
       subscriptionExpiryDate: '订阅到期：',
       subscriptionRemainingDays: '剩余 {days} 天',
       subscriptionExpired: '订阅已到期',
       subscriptionExpiryUnavailable: '未获取到订阅到期时间',
       subscriptionExpiryLoading: '正在查询订阅时间…',
-      subscriptionExpiryDisabled: '开启上方“刷新订阅”以查询到期时间',
+      subscriptionExpiryDisabled: '点击账号刷新查询订阅，或开启上方“刷新订阅”后手动刷新列表',
       refreshSubscription: '刷新订阅',
-      refreshSubscriptionHint: '开启后查询订阅时间，并在手动或自动刷新列表时重新请求；关闭后保留结果，不再请求。',
+      refreshSubscriptionHint: '开启后，点击顶部刷新时同时查询订阅；定时自动刷新不查询订阅',
       // 容量状态提示
       capacity: {
         windowCost: {

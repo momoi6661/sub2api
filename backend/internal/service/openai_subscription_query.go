@@ -98,7 +98,16 @@ func (s *OpenAIOAuthService) QueryAccountSubscription(ctx context.Context, accou
 		case <-queryCtx.Done():
 			return nil, queryCtx.Err()
 		}
-		expiresAt := fetchChatGPTSubscriptionExpiresAt(queryCtx, s.privacyClientFactory, token, proxyURL, accountID)
+		var subscriptionErr error
+		expiresAt := fetchChatGPTSubscriptionExpiresAt(queryCtx, s.privacyClientFactory, token, proxyURL, accountID, func(status int, err error) {
+			if status == http.StatusUnauthorized {
+				subscriptionErr = infraerrors.New(http.StatusBadGateway, "OPENAI_SUBSCRIPTION_UPSTREAM_UNAUTHORIZED", "Subscription query rejected by OpenAI (401); check account authorization")
+			} else if status != 0 {
+				subscriptionErr = infraerrors.New(http.StatusBadGateway, "OPENAI_SUBSCRIPTION_UPSTREAM_ERROR", fmt.Sprintf("Subscription query rejected by OpenAI (%d)", status))
+			} else if err != nil {
+				subscriptionErr = infraerrors.New(http.StatusBadGateway, "OPENAI_SUBSCRIPTION_NETWORK_ERROR", "Subscription query failed; check account proxy and network")
+			}
+		})
 		if expiresAt == "" {
 			if info := fetchChatGPTAccountInfo(queryCtx, s.privacyClientFactory, token, proxyURL, accountID); info != nil && strings.EqualFold(info.AccountID, accountID) {
 				expiresAt = info.SubscriptionExpiresAt
@@ -109,6 +118,9 @@ func (s *OpenAIOAuthService) QueryAccountSubscription(ctx context.Context, accou
 		}
 		if err := queryCtx.Err(); err != nil {
 			return nil, err
+		}
+		if expiresAt == "" && subscriptionErr != nil {
+			return nil, subscriptionErr
 		}
 		result := OpenAIAccountSubscription{SubscriptionExpiresAt: expiresAt, CheckedAt: time.Now().UTC().Format(time.RFC3339)}
 		ttl := 5 * time.Minute

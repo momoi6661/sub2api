@@ -11,6 +11,7 @@ const {
   getById,
   getBatchTodayStats,
   getBatchUsage,
+  getSubscription,
   getUpstreamBillingProbeSettings,
   getAllProxies,
   getAllGroups,
@@ -23,6 +24,7 @@ const {
   getById: vi.fn(),
   getBatchTodayStats: vi.fn(),
   getBatchUsage: vi.fn(),
+  getSubscription: vi.fn(),
   getUpstreamBillingProbeSettings: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
@@ -39,6 +41,7 @@ vi.mock('@/api/admin', () => ({
       listWithEtag,
       getBatchTodayStats,
       getBatchUsage,
+      getSubscription,
       getUpstreamBillingProbeSettings,
       delete: vi.fn(),
       batchClearError: vi.fn(),
@@ -113,7 +116,7 @@ function mountView(stubActionMenu = true) {
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
         DataTable: DataTableStub,
         AccountTableActions: { emits: ['refresh'], template: '<div><button data-test="refresh-list" @click="$emit(\'refresh\')">Refresh</button><slot name="after" /></div>' },
-        AccountSubscriptionExpiry: defineComponent({ props: ['accountId', 'enabled', 'refreshKey'], template: '<div data-test="subscription" :data-enabled="enabled" :data-refresh="refreshKey" />' }),
+        AccountSubscriptionExpiry: defineComponent({ props: ['accountId', 'enabled', 'refreshKey'], setup(props, { expose }) { expose({ refresh: () => getSubscription(props.accountId, true) }) }, template: '<div data-test="subscription" :data-enabled="enabled" :data-refresh="refreshKey" />' }),
         AccountTableFilters: true,
         AccountBulkActionsBar: true,
         Pagination: true,
@@ -177,6 +180,7 @@ describe('admin AccountsView lite account list', () => {
     getById.mockReset().mockResolvedValue(fullAccount)
     getBatchTodayStats.mockReset().mockResolvedValue({ stats: {} })
     getBatchUsage.mockReset().mockResolvedValue({ usage: {}, errors: {} })
+    getSubscription.mockReset().mockResolvedValue({ subscription_expires_at: "", checked_at: "" })
     getUpstreamBillingProbeSettings.mockReset().mockResolvedValue({ enabled: true })
     getAllProxies.mockReset().mockResolvedValue([])
     getAllGroups.mockReset().mockResolvedValue([{ id: 7, name: 'codex', platform: 'openai' }])
@@ -188,6 +192,38 @@ describe('admin AccountsView lite account list', () => {
   afterEach(() => {
     vi.useRealTimers()
     vi.restoreAllMocks()
+  })
+
+  it('refreshes only the selected account with forced usage and current account details', async () => {
+    listAccounts.mockResolvedValue({ items: [listRow, { ...listRow, id: 43, name: 'other' }], total: 2, page: 1, page_size: 20, pages: 1 })
+    const wrapper = mountView()
+    await flushPromises()
+    getBatchUsage.mockClear()
+    getBatchTodayStats.mockClear()
+    getById.mockClear()
+    await wrapper.findAll('[data-testid="refresh-account-button"]')[0].trigger('click')
+    await flushPromises()
+    expect(getBatchUsage).toHaveBeenCalledWith([42], true)
+    expect(getBatchTodayStats).toHaveBeenCalledWith([42])
+    expect(getSubscription).toHaveBeenCalledWith(42, true)
+    expect(getById).toHaveBeenCalledWith(42)
+    expect(refreshCredentials).not.toHaveBeenCalled()
+    expect(listAccounts).toHaveBeenCalledTimes(1)
+    wrapper.unmount()
+  })
+
+  it('manual list refresh forces one usage batch and reloads account state afterwards', async () => {
+    const wrapper = mountView()
+    await flushPromises()
+    getBatchUsage.mockClear()
+    listAccounts.mockClear()
+    await wrapper.get('[data-test="refresh-list"]').trigger('click')
+    await flushPromises()
+    expect(getBatchUsage).toHaveBeenCalledTimes(1)
+    expect(getBatchUsage).toHaveBeenCalledWith([42], true)
+    expect(listAccounts).toHaveBeenCalledTimes(1)
+    expect(getBatchUsage.mock.invocationCallOrder[0]).toBeLessThan(listAccounts.mock.invocationCallOrder[0])
+    wrapper.unmount()
   })
 
   it('keeps lite=1 on the initial list request', async () => {
@@ -220,21 +256,21 @@ describe('admin AccountsView lite account list', () => {
     await wrapper.get('[data-test="refresh-list"]').trigger('click')
     await flushPromises()
     expect(subscription.attributes('data-refresh')).toBe('0')
-    const option = wrapper.get('label input[type="checkbox"]')
-    await option.setValue(true)
+    const option = wrapper.get('[data-testid="subscription-refresh-toggle"]')
+    await option.trigger('click')
     await wrapper.get('[data-test="refresh-list"]').trigger('click')
     await flushPromises()
     expect(subscription.attributes('data-enabled')).toBe('true')
     expect(subscription.attributes('data-refresh')).toBe('1')
     expect(JSON.parse(localStorage.getItem('account-auto-refresh')!)).toMatchObject({ enabled: false, subscription_enabled: true })
-    await option.setValue(false)
+    await option.trigger('click')
     await wrapper.get('[data-test="refresh-list"]').trigger('click')
     await flushPromises()
     expect(subscription.attributes('data-refresh')).toBe('1')
     wrapper.unmount()
   })
 
-  it('refreshes subscription data on automatic list 304 responses', async () => {
+  it('never queries subscriptions during automatic list refresh', async () => {
     vi.useFakeTimers()
     vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
     localStorage.setItem('account-auto-refresh', JSON.stringify({ enabled: true, interval_seconds: 5, subscription_enabled: true }))
@@ -243,7 +279,10 @@ describe('admin AccountsView lite account list', () => {
     await vi.advanceTimersByTimeAsync(6000)
     await flushPromises()
     expect(listWithEtag).toHaveBeenCalled()
-    expect(wrapper.get('[data-test="subscription"]').attributes('data-refresh')).toBe('1')
+    expect(wrapper.get('[data-test="subscription"]').attributes('data-refresh')).toBe('0')
+    await vi.advanceTimersByTimeAsync(300_000)
+    await flushPromises()
+    expect(wrapper.get('[data-test="subscription"]').attributes('data-refresh')).toBe('0')
     wrapper.unmount()
   })
 

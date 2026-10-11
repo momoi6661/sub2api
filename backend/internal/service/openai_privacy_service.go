@@ -225,7 +225,12 @@ func fetchChatGPTAccountInfo(ctx context.Context, clientFactory PrivacyClientFac
 // fetchChatGPTSubscriptionExpiresAt reads the lightweight subscription endpoint used by
 // ChatGPT/Codex clients. Some Plus accounts no longer expose entitlement.expires_at in
 // accounts/check, but this endpoint still returns active_until.
-func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, accountID string) string {
+func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory PrivacyClientFactory, accessToken, proxyURL, accountID string, observe ...func(int, error)) string {
+	report := func(status int, err error) {
+		for _, callback := range observe {
+			callback(status, err)
+		}
+	}
 	accountID = strings.TrimSpace(accountID)
 	if accessToken == "" || accountID == "" || clientFactory == nil {
 		return ""
@@ -236,6 +241,7 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 
 	client, err := clientFactory(proxyURL)
 	if err != nil {
+		report(0, err)
 		slog.Debug("chatgpt_subscription_client_error", "error", err.Error())
 		return ""
 	}
@@ -258,10 +264,16 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		SetHeader("x-openai-target-route", "/backend-api/subscriptions").
 		Get(chatGPTSubscriptionsURL)
 	if err != nil {
+		report(0, err)
 		slog.Warn("chatgpt_subscription_request_error", "error", err.Error())
 		return ""
 	}
+	if resp == nil || resp.Response == nil {
+		report(0, fmt.Errorf("subscription query returned no response"))
+		return ""
+	}
 	if !resp.IsSuccessState() {
+		report(resp.StatusCode, nil)
 		slog.Warn("chatgpt_subscription_failed", "status", resp.StatusCode, "cf_challenge", isCloudflareChallengeResponse(resp.Header.Get("cf-mitigated"), resp.String()), "body", truncate(resp.String(), 200))
 		return ""
 	}

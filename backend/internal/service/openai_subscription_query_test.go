@@ -154,3 +154,21 @@ func TestQueryCodexSubscriptionExpiryHandlesClosedConnection(t *testing.T) {
 	t.Cleanup(func() { chatGPTSubscriptionsURL = oldURL })
 	require.Empty(t, queryCodexSubscriptionExpiry(context.Background(), newTestPrivacyClientFactory(), "saved-token", "", "saved-workspace"))
 }
+
+func TestQueryAccountSubscriptionDoesNotCacheUnauthorizedAsEmptyExpiry(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	oldSubscriptionURL, oldCheckURL := chatGPTSubscriptionsURL, chatGPTAccountsCheckURL
+	chatGPTSubscriptionsURL, chatGPTAccountsCheckURL = server.URL, server.URL
+	t.Cleanup(func() { chatGPTSubscriptionsURL, chatGPTAccountsCheckURL = oldSubscriptionURL, oldCheckURL })
+	svc := &OpenAIOAuthService{privacyClientFactory: newTestPrivacyClientFactory()}
+	account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeOAuth, Credentials: map[string]any{
+		"access_token": "rejected-token", "chatgpt_account_id": "saved-workspace",
+	}}
+	result, err := svc.QueryAccountSubscription(context.Background(), account, true)
+	require.Nil(t, result)
+	require.ErrorContains(t, err, "401")
+	require.Empty(t, svc.subscriptionQueries.cache)
+}

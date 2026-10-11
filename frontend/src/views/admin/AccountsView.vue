@@ -442,9 +442,12 @@
               <button
                 v-if="canOneClickAuthorize(row)"
                 :title="t('admin.accounts.oneClickAuth.title')"
-                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 text-primary-600 transition-colors hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20"
+                :class="hasOneClickAuthConfig(row)
+                  ? 'text-primary-600 hover:bg-primary-50 dark:text-primary-400 dark:hover:bg-primary-900/20'
+                  : 'cursor-not-allowed text-gray-400 dark:text-dark-500'"
+                class="flex flex-col items-center gap-0.5 rounded-lg p-1.5 transition-colors"
                 data-testid="one-click-auth-button"
-                :disabled="authOpening.has(row.id)"
+                :disabled="authOpening.has(row.id) || !hasOneClickAuthConfig(row)"
                 @click="handleOneClickAuth(row)"
               >
                 <Icon :name="authOpening.has(row.id) ? 'refresh' : 'link'" size="sm" :class="authOpening.has(row.id) && 'animate-spin'" />
@@ -1767,6 +1770,11 @@ function accountDisplayEmail(row: any): string {
 
 function canOneClickAuthorize(row: Account): boolean {
   return row.platform === 'openai' && row.type === 'oauth' && row.parent_account_id == null
+}
+
+function hasOneClickAuthConfig(row: Account): boolean {
+  const profileID = row.extra?.one_click_auth_profile_id
+  return typeof profileID === 'string' && profileID.trim().length > 0
 }
 
 function accountHomepageUrl(row: Account): string {

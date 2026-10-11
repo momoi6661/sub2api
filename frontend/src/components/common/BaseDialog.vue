@@ -1,15 +1,14 @@
 <template>
   <Teleport to="body">
-    <Transition name="modal">
-      <div
-        v-if="show"
-        class="modal-overlay"
-        :style="zIndexStyle"
-        :aria-labelledby="dialogId"
-        role="dialog"
-        aria-modal="true"
-        @click.self="handleClose"
-      >
+    <div
+      v-if="show"
+      class="modal-overlay"
+      :style="zIndexStyle"
+      :aria-labelledby="dialogId"
+      role="dialog"
+      aria-modal="true"
+      @click.self="handleClose"
+    >
         <!-- Modal panel -->
         <div ref="dialogRef" :class="['modal-content', widthClasses]" @click.stop>
           <!-- Header -->
@@ -37,8 +36,7 @@
             <slot name="footer"></slot>
           </div>
         </div>
-      </div>
-    </Transition>
+    </div>
   </Teleport>
 </template>
 

@@ -242,6 +242,7 @@ export default {
       subscriptionExpiryDate: '订阅到期：',
       subscriptionRemainingDays: '剩余 {days} 天',
       subscriptionExpired: '订阅已到期',
+      subscriptionExpiryPreviousResult: '未获取到最新订阅时间，显示上次查询结果',
       subscriptionExpiryUnavailable: '未获取到订阅到期时间',
       subscriptionExpiryLoading: '正在查询订阅时间…',
       subscriptionExpiryDisabled: '点击账号刷新查询订阅，或开启上方“刷新订阅”后手动刷新列表',

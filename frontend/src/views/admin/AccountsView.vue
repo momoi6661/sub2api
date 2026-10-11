@@ -268,6 +268,8 @@
                 :account-id="row.id"
                 :enabled="subscriptionRefreshEnabled"
                 :refresh-key="subscriptionRefreshToken"
+                :subscription="subscriptionSnapshots[String(row.id)] ?? null"
+                @subscription-loaded="saveAccountSubscription(row.id, $event)"
               />
             </div>
           </template>
@@ -545,8 +547,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch } from 'vue'
-import { useIntervalFn } from '@vueuse/core'
+import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch, nextTick } from 'vue'
+import { useIntervalFn, useSessionStorage } from '@vueuse/core'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import OneClickAuthForm from '@/components/account/OneClickAuthForm.vue'
 import ReauthProfileSelect from '@/components/account/ReauthProfileSelect.vue'
@@ -588,6 +590,7 @@ import AccountPriorityCell from '@/components/account/AccountPriorityCell.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
 import Toggle from '@/components/common/Toggle.vue'
 import AccountSubscriptionExpiry from '@/components/account/AccountSubscriptionExpiry.vue'
+import type { AccountSubscriptionInfo } from '@/api/admin/accounts'
 import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'
@@ -774,6 +777,14 @@ const todayStatsReqSeq = ref(0)
 const pendingTodayStatsRefresh = ref(false)
 const usageManualRefreshToken = ref(0)
 const subscriptionRefreshToken = ref(0)
+// Keep queried metadata when table loading/virtualization destroys a row.
+// Session storage restores the same result on page reload without querying OpenAI.
+const subscriptionSnapshots = useSessionStorage<Record<string, AccountSubscriptionInfo>>(
+  `account-subscription-results:${authStore.user?.id ?? 'admin'}`, {}
+)
+const saveAccountSubscription = (id: number, result: AccountSubscriptionInfo) => {
+  subscriptionSnapshots.value = { ...subscriptionSnapshots.value, [String(id)]: result }
+}
 const refreshingAccountIDs = reactive(new Set<number>())
 const manualRefreshing = ref(false)
 type RefreshableAccountCell = { refresh: () => Promise<void> }
@@ -1602,6 +1613,7 @@ const handleManualRefresh = async () => {
     }
     await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
     if (subscriptionRefreshEnabled.value) {
+      await nextTick()
       subscriptionRefreshToken.value += 1
     }
   } finally {

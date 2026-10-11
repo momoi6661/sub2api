@@ -17,19 +17,20 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useNow } from '@vueuse/core'
 import { useI18n } from 'vue-i18n'
-import { getSubscription } from '@/api/admin/accounts'
+import { getSubscription, type AccountSubscriptionInfo } from '@/api/admin/accounts'
 
-const props = withDefaults(defineProps<{ accountId: number; enabled?: boolean; refreshKey?: number }>(), { enabled: true })
+const props = withDefaults(defineProps<{ accountId: number; enabled?: boolean; refreshKey?: number; subscription?: AccountSubscriptionInfo | null }>(), { enabled: true })
+const emit = defineEmits<{ 'subscription-loaded': [result: AccountSubscriptionInfo] }>()
 const { t } = useI18n()
 const now = useNow({ interval: 60_000 })
 const rootRef = ref<HTMLElement | null>(null)
-const expiresAt = ref('')
+const expiresAt = ref(props.subscription?.subscription_expires_at ?? '')
 const loading = ref(false)
 const queryError = ref('')
 let visible = false
 let observer: IntersectionObserver | null = null
 let request: AbortController | null = null
-const queried = ref(false)
+const queried = ref(!!props.subscription)
 let pendingForce = false
 
 async function loadSubscription(force = false, manual = false) {
@@ -40,7 +41,16 @@ async function loadSubscription(force = false, manual = false) {
   queryError.value = ''
   try {
     const result = await getSubscription(props.accountId, force, currentRequest.signal)
-    if (request === currentRequest) expiresAt.value = result.subscription_expires_at
+    if (request === currentRequest) {
+      const validExpiry = result.subscription_expires_at && Number.isFinite(Date.parse(result.subscription_expires_at))
+      if (validExpiry || !expiresAt.value) {
+        expiresAt.value = validExpiry ? result.subscription_expires_at : ''
+        emit('subscription-loaded', { ...result, subscription_expires_at: expiresAt.value })
+      } else {
+        // Missing metadata is not evidence that a previously queried subscription expired.
+        queryError.value = t('admin.accounts.subscriptionExpiryPreviousResult')
+      }
+    }
   } catch (error: any) {
     if (request === currentRequest) queryError.value = error?.message || t('admin.accounts.refreshAccountFailed')
     // Keep a previously queried date during a transient request failure.
@@ -74,13 +84,17 @@ watch(() => [props.accountId, props.refreshKey], (next, previous) => {
   request?.abort()
   request = null
   if (identityChanged) {
-    expiresAt.value = ''
+    expiresAt.value = props.subscription?.subscription_expires_at ?? ''
     queryError.value = ''
   }
-  queried.value = false
+  queried.value = !!props.subscription
   pendingForce = next[1] !== previous[1] && props.enabled
   loading.value = false
   if (pendingForce) void loadSubscription(true)
+})
+watch(() => props.subscription, (result) => {
+  expiresAt.value = result?.subscription_expires_at ?? ''
+  queried.value = !!result
 })
 watch(() => props.enabled, (enabled) => {
   if (!enabled) pendingForce = false

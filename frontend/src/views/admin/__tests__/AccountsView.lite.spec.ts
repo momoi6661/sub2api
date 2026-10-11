@@ -116,7 +116,7 @@ function mountView(stubActionMenu = true) {
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
         DataTable: DataTableStub,
         AccountTableActions: { emits: ['refresh'], template: '<div><button data-test="refresh-list" @click="$emit(\'refresh\')">Refresh</button><slot name="after" /></div>' },
-        AccountSubscriptionExpiry: defineComponent({ props: ['accountId', 'enabled', 'refreshKey'], setup(props, { expose }) { expose({ refresh: () => getSubscription(props.accountId, true) }) }, template: '<div data-test="subscription" :data-enabled="enabled" :data-refresh="refreshKey" />' }),
+        AccountSubscriptionExpiry: defineComponent({ name: 'AccountSubscriptionExpiryStub', props: ['accountId', 'enabled', 'refreshKey', 'subscription'], setup(props, { expose }) { expose({ refresh: () => getSubscription(props.accountId, true) }) }, template: '<div data-test="subscription" :data-enabled="enabled" :data-refresh="refreshKey" :data-expiry="subscription?.subscription_expires_at" />' }),
         AccountTableFilters: true,
         AccountBulkActionsBar: true,
         Pagination: true,
@@ -175,6 +175,7 @@ const fullAccount = {
 describe('admin AccountsView lite account list', () => {
   beforeEach(() => {
     localStorage.clear()
+    sessionStorage.clear()
     listAccounts.mockReset().mockResolvedValue({ items: [listRow], total: 1, page: 1, page_size: 20, pages: 1 })
     listWithEtag.mockReset().mockResolvedValue({ notModified: true, etag: 'compact-etag', data: null })
     getById.mockReset().mockResolvedValue(fullAccount)
@@ -224,6 +225,22 @@ describe('admin AccountsView lite account list', () => {
     expect(listAccounts).toHaveBeenCalledTimes(1)
     expect(getBatchUsage.mock.invocationCallOrder[0]).toBeLessThan(listAccounts.mock.invocationCallOrder[0])
     wrapper.unmount()
+  })
+
+  it('restores queried subscription metadata after the account view is remounted without querying upstream', async () => {
+    const result = { subscription_expires_at: '2027-01-01T00:00:00Z', checked_at: '2026-10-12T00:00:00Z' }
+    const wrapper = mountView()
+    await flushPromises()
+    // The stub carries the same subscription-loaded event as the real row component.
+    const child = wrapper.getComponent({ name: 'AccountSubscriptionExpiryStub' })
+    child.vm.$emit('subscription-loaded', result)
+    await flushPromises()
+    wrapper.unmount()
+    const reopened = mountView()
+    await flushPromises()
+    expect(reopened.get('[data-test="subscription"]').attributes('data-expiry')).toBe(result.subscription_expires_at)
+    expect(getSubscription).not.toHaveBeenCalled()
+    reopened.unmount()
   })
 
   it('keeps lite=1 on the initial list request', async () => {

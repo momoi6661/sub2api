@@ -110,6 +110,26 @@ describe('AccountSubscriptionExpiry', () => {
     wrapper.unmount()
   })
 
+  it('restores previous queried data on remount and preserves it during an empty refresh', async () => {
+    const previous = { subscription_expires_at: '2027-01-01T00:00:00Z', checked_at: '2026-10-12T00:00:00Z' }
+    const wrapper = mount(AccountSubscriptionExpiry, { props: { accountId: 42, enabled: false, subscription: previous } })
+    await flushPromises()
+    expect(wrapper.text()).toContain('2027-01-01')
+    expect(getSubscription).not.toHaveBeenCalled()
+    let resolve!: (result: typeof previous) => void
+    vi.mocked(getSubscription).mockReturnValueOnce(new Promise(done => { resolve = done }))
+    const refresh = (wrapper.vm as unknown as { refresh: () => Promise<void> }).refresh()
+    await flushPromises()
+    expect(wrapper.text()).toContain('2027-01-01')
+    resolve({ subscription_expires_at: '', checked_at: '2026-10-12T01:00:00Z' })
+    await refresh
+    await flushPromises()
+    expect(wrapper.text()).toContain('2027-01-01')
+    expect(wrapper.text()).toContain('subscriptionExpiryPreviousResult')
+    expect(wrapper.emitted('subscription-loaded')).toBeUndefined()
+    wrapper.unmount()
+  })
+
   it('does not query with the option off and preserves the result when disabled', async () => {
     vi.mocked(getSubscription).mockResolvedValue({ subscription_expires_at: '2027-01-01T00:00:00Z', checked_at: '' })
     const wrapper = mount(AccountSubscriptionExpiry, { props: { accountId: 1, enabled: false, refreshKey: 0 } })

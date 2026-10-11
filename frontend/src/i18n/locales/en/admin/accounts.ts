@@ -401,6 +401,7 @@ export default {
       subscriptionExpiryDate: 'Subscription expires:',
       subscriptionRemainingDays: '{days} days remaining',
       subscriptionExpired: 'Subscription expired',
+      subscriptionExpiryPreviousResult: 'Latest expiry unavailable; showing the previous query result',
       subscriptionExpiryUnavailable: 'Subscription expiry unavailable',
       subscriptionExpiryLoading: 'Querying subscription expiry…',
       subscriptionExpiryDisabled: 'Refresh this account, or enable Refresh subscription and manually refresh the list',

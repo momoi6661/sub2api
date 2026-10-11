@@ -49,6 +49,7 @@ export async function readReauthSecret(id: string, signal?: AbortSignal): Promis
 
 export interface ReauthScriptMaterial {
   code_script: string
+  custom_input?: string
   secret: string
   api_url: string
   mailbox_address: string
@@ -151,6 +152,8 @@ export async function authorizeNewAccount(
   return data
 }
 
-export async function testReauthScript(profile: ReauthProfile, loginEmail: string, signal?: AbortSignal): Promise<void> {
-  await apiClient.post('/admin/reauth-profiles/test-script', { profile, login_email: loginEmail }, { timeout: 40_000, signal })
+export interface ReauthScriptTestResult { result_type: 'code' | 'auth_file'; code?: string; auth_keys?: string[] }
+export async function testReauthScript(profile: ReauthProfile, loginEmail: string, signal?: AbortSignal): Promise<ReauthScriptTestResult> {
+  const { data } = await apiClient.post<ReauthScriptTestResult>('/admin/reauth-profiles/test-script', { profile, login_email: loginEmail }, { timeout: 40_000, signal })
+  return data
 }

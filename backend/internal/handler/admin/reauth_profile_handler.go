@@ -1,7 +1,9 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
+	"sort"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/response"
@@ -40,14 +42,28 @@ func (h *SettingHandler) TestReauthScript(c *gin.Context) {
 	if profile.APIResultType == "" {
 		profile.APIResultType = "code"
 	}
-	_, err := service.ExecuteReauthRunner(c.Request.Context(), service.ReauthRunnerTask{Mode: "protocol", Script: profile.CodeScript, ResultType: profile.APIResultType, Context: map[string]any{
+	result, err := service.ExecuteReauthRunner(c.Request.Context(), service.ReauthRunnerTask{Mode: "protocol", Script: profile.CodeScript, ResultType: profile.APIResultType, Context: map[string]any{
 		"accountId": 0, "loginEmail": input.LoginEmail, "since": time.Now().UTC().Add(-2 * time.Minute).Format(time.RFC3339),
 	}, Input: profile.CustomInput})
 	if err != nil {
 		writeReauthError(c, err)
 		return
 	}
-	response.Success(c, map[string]bool{"succeeded": true})
+	if result.Type == "code" {
+		response.Success(c, gin.H{"succeeded": true, "result_type": "code", "code": result.Code})
+		return
+	}
+	var auth map[string]any
+	if err := json.Unmarshal(result.Auth, &auth); err != nil {
+		response.Success(c, gin.H{"succeeded": true, "result_type": "auth_file", "auth_keys": []string{"(JSON string)"}})
+		return
+	}
+	keys := make([]string, 0, len(auth))
+	for key := range auth {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	response.Success(c, gin.H{"succeeded": true, "result_type": "auth_file", "auth_keys": keys})
 }
 
 func (h *SettingHandler) ListReauthProfiles(c *gin.Context) {

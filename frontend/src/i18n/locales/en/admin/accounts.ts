@@ -553,7 +553,7 @@ export default {
         scriptHint: "Enter an async function body executed on the server. fetch is available without CORS. Only trusted administrator code is supported. Timeout: 30 seconds.",
         testEmail: 'Test account login email',
         testCode: 'Test script execution',
-        testSuccess: 'Script completed (return value not displayed or logged)',
+        testSuccess: 'Script completed. Returned result:',
         getCode: 'Get email verification code',
         codeReady: 'Code filled. Confirm the browser requested this login code before completing authorization.',
 

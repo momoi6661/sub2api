@@ -347,7 +347,7 @@ export default {
         scriptHint: "填写 async 函数体，在服务器执行并 await 返回结果；支持 fetch，无需 CORS。只执行受信任管理员代码，30 秒超时。",
         testEmail: '测试账号登录邮箱',
         testCode: '测试执行代码',
-        testSuccess: '代码执行成功（不显示或记录返回内容）',
+        testSuccess: '代码执行成功，返回结果：',
         getCode: '获取邮箱验证码',
         codeReady: '已填入验证码，请确认浏览器已发送本次登录验证码后完成授权。',
 

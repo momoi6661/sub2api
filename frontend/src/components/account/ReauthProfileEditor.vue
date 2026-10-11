@@ -26,7 +26,10 @@
         <textarea id="auth-profile-test-input" v-model="form.custom_input" class="input font-mono" maxlength="16384" />
         <p class="input-hint">{{ t('admin.accounts.authProfiles.customInputDescription') }}</p>
         <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
-        <p v-if="testResult" role="status" class="text-sm text-green-600">{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
+        <div v-if="testResult" role="status" class="rounded-lg bg-green-50 p-3 text-sm text-green-700 dark:bg-green-900/20 dark:text-green-300">
+          <p>{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
+          <pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap break-all font-mono text-xs">{{ testResultDetail }}</pre>
+        </div>
       </div>
       <div v-if="form.mailbox_mode !== 'api'">
         <div v-if="show && form.id && form.has_secret" class="mb-3 rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
@@ -63,7 +66,7 @@ import Select from '@/components/common/Select.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ReauthProfileSecret from './ReauthProfileSecret.vue'
 import ReauthScriptRules from './ReauthScriptRules.vue'
-import { saveReauthProfile, testReauthScript, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import { readReauthScript, saveReauthProfile, testReauthScript, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { getAll } from '@/api/admin/proxies'
 import type { Proxy } from '@/types'
 
@@ -81,7 +84,7 @@ const proxies = ref<Proxy[]>([])
 const saving = ref(false)
 const showSecret = ref(false)
 const error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
-const testEmail = ref(''), testResult = ref(''), testing = ref(false)
+const testEmail = ref(''), testResult = ref(''), testResultDetail = ref(''), testing = ref(false)
 let testAbort: AbortController | null = null
 const scriptExample = computed(() => `// context: loginEmail, since
 // input is the raw text entered when applying this profile.
@@ -97,20 +100,26 @@ const data = await response.json();
 ${form.value.api_result_type === 'auth_file' ? 'return { type: \'auth_file\', auth: data };' : 'return { type: \'code\', code: String(data.code) };'}`)
 async function testScript() {
   if (testing.value) return
-  testing.value = true; error.value = ''; errorCode.value = ''; errorRetryable.value = false; testResult.value = ''
+  testing.value = true; error.value = ''; errorCode.value = ''; errorRetryable.value = false; testResult.value = ''; testResultDetail.value = ''
   const controller = new AbortController(); testAbort = controller
   try {
-    await testReauthScript(form.value, testEmail.value, controller.signal)
-    if (!controller.signal.aborted) testResult.value = 'ok'
+    const result = await testReauthScript(form.value, testEmail.value, controller.signal)
+    if (!controller.signal.aborted) {
+      testResult.value = 'ok'
+      testResultDetail.value = result.result_type === 'code' ? `${result.result_type}: ${result.code || '(empty)'}` : `${result.result_type}: ${(result.auth_keys || []).join(', ')}`
+    }
   } catch (e: any) { if (!controller.signal.aborted) { error.value = e?.message || t('admin.accounts.authProfiles.failed'); errorCode.value = e?.reason || e?.response?.data?.reason || e?.code || 'REQUEST_FAILED'; errorRetryable.value = (e?.metadata || e?.response?.data?.metadata)?.retryable === 'true' } }
   finally { testing.value = false }
 }
 onBeforeUnmount(() => testAbort?.abort())
 watch(() => props.show, async show => {
   showSecret.value = false
-  testAbort?.abort(); testResult.value = ''; testEmail.value = ''
+  testAbort?.abort(); testResult.value = ''; testResultDetail.value = ''; testEmail.value = ''
   if (!show) { form.value.secret = ''; form.value.code_script = ''; return }
   form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: props.profile.mailbox_wait_seconds || 60, email_resend_seconds: props.profile.email_resend_seconds || 30, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '', custom_input: props.profile.custom_input || '' } : defaults()
+  if (props.profile?.id && props.profile.has_code_script) {
+    try { const material = await readReauthScript(props.profile.id); form.value.code_script = material.code_script; form.value.custom_input = material.custom_input || form.value.custom_input } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
+  }
   error.value = ''; errorCode.value = ''
   try { proxies.value = await getAll() } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
 })
@@ -118,7 +127,7 @@ async function save() {
   if (saving.value) return
   saving.value = true
   error.value = ''
-  try { emit('saved', await saveReauthProfile({ ...form.value, custom_input: '', imap_username: form.value.mailbox_address.trim() })); form.value.secret = ''; form.value.code_script = ''; emit('close') }
+  try { emit('saved', await saveReauthProfile({ ...form.value, imap_username: form.value.mailbox_address.trim() })); form.value.secret = ''; form.value.code_script = ''; emit('close') }
   catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
   finally { saving.value = false }
 }

@@ -1,11 +1,9 @@
 <template>
   <BaseDialog
-    v-if="show"
-    :show="true"
+    :show="show"
     :title="t('admin.accounts.authProfiles.edit')"
     :z-index="60"
     :close-on-click-outside="false"
-    :close-on-escape="false"
     @close="emit('close')"
   >
     <form id="reauth-profile-form" class="space-y-4" @submit.prevent="save">
@@ -70,7 +68,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onBeforeUnmount, computed } from 'vue'
+import { ref, watch, onBeforeUnmount, computed, nextTick } from 'vue'
 import { useI18n } from 'vue-i18n'
 import BaseDialog from '@/components/common/BaseDialog.vue'
 import Select from '@/components/common/Select.vue'
@@ -127,11 +125,16 @@ watch(() => props.show, async show => {
   showSecret.value = false
   testAbort?.abort(); testResult.value = ''; testResultDetail.value = ''; testEmail.value = ''
   if (!show) { form.value.secret = ''; form.value.code_script = ''; return }
-  form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: props.profile.mailbox_wait_seconds || 60, email_resend_seconds: props.profile.email_resend_seconds || 30, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '', custom_input: props.profile.custom_input || '' } : defaults()
-  if (props.profile?.id && props.profile.has_code_script) {
-    try { const material = await readReauthScript(props.profile.id); form.value.code_script = material.code_script; form.value.custom_input = material.custom_input || form.value.custom_input } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
-  }
+  const profile = props.profile
+  form.value = profile ? { ...profile, proxy_ids: [...(profile.proxy_ids || (profile.proxy_id ? [profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: profile.mailbox_wait_seconds || 60, email_resend_seconds: profile.email_resend_seconds || 30, api_result_type: profile.api_result_type || 'code', secret: '', code_script: '', custom_input: profile.custom_input || '' } : defaults()
   error.value = ''; errorCode.value = ''
+  // Let the dialog paint before reading encrypted script material. The editor
+  // must stay visible while this request is pending.
+  await nextTick()
+  if (!props.show || props.profile?.id !== profile?.id) return
+  if (profile?.id && profile.has_code_script) {
+    try { const material = await readReauthScript(profile.id); if (props.show && props.profile?.id === profile.id) { form.value.code_script = material.code_script; form.value.custom_input = material.custom_input || form.value.custom_input } } catch (e: any) { if (props.show && props.profile?.id === profile.id) error.value = e?.message || t('admin.accounts.authProfiles.failed') }
+  }
   try { proxies.value = await getAll() } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
 })
 async function save() {

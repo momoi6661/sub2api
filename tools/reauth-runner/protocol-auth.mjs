@@ -38,7 +38,7 @@ function nextURL(data) {
 
 // The state and verifier are task-local; cookies never survive this function.
 export async function authorizeWithProtocol(task, executeScript, signal, report = () => {}, fetchOverride) {
-  let transport, sentinel, deviceID, phase = 'PROTOCOL_CONNECTION_FAILED'
+  let transport, sentinel, deviceID, selectedWorkspaceID, phase = 'PROTOCOL_CONNECTION_FAILED'
   try {
     signal?.throwIfAborted()
     if (task.mailbox) {
@@ -235,11 +235,14 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       }
       if (!workspaces.length) reject('WORKSPACE_LIST_UNAVAILABLE', 'The authorization session did not provide a usable workspace list', true)
       const expectedID = task.context.expectedAccountID
-      // Match an existing account exactly. For a new account, mirror the
-      // reference flow: prefer personal, otherwise use the first offered ID.
+      const isPersonal = item => item.is_personal === true || item.type === 'personal' ||
+        /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))
+      // Preserve an existing identity; new accounts skip personal workspaces.
       const workspace = expectedID ? workspaces.find(item => item.id === expectedID)
-        : workspaces.find(item => item.is_personal === true || /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))) || workspaces[0]
-      if (!workspace) reject('WORKSPACE_ID_MISMATCH', 'The existing account workspace is not available in this authorization session')
+        : workspaces.find(item => !isPersonal(item))
+      if (expectedID && !workspace) reject('WORKSPACE_ID_MISMATCH', 'The existing account workspace is not available in this authorization session')
+      if (!workspace || isPersonal(workspace)) reject('TEAM_WORKSPACE_UNAVAILABLE', 'No eligible team workspace is available; personal workspace authorization is disabled')
+      selectedWorkspaceID = workspace.id
       const selected = await post('/api/accounts/workspace/select', { workspace_id: workspace.id }, step.url)
       const target = nextURL(selected.data)
       if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not return an authorization callback')
@@ -258,7 +261,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
     }
     const identity = claims(data.id_token)
     const accountID = identity['https://api.openai.com/auth']?.chatgpt_account_id
-    if (typeof identity.email !== 'string' || identity.email.toLowerCase() !== task.context.loginEmail.toLowerCase() || !accountID || (task.context.expectedAccountID && accountID !== task.context.expectedAccountID)) {
+    if (typeof identity.email !== 'string' || identity.email.toLowerCase() !== task.context.loginEmail.toLowerCase() || !accountID || (task.context.expectedAccountID && accountID !== task.context.expectedAccountID) || (selectedWorkspaceID && accountID !== selectedWorkspaceID)) {
       reject('IDENTITY_MISMATCH', 'Authorized identity does not match the requested account')
     }
     signal?.throwIfAborted()

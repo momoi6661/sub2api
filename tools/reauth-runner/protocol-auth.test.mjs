@@ -289,8 +289,8 @@ test('new accounts use the first offered workspace when none is marked personal'
   assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
 })
 
-for (const personal of [{ is_personal: true }, { title: 'Personal' }, { name: '个人' }]) test(`prefers the personal workspace: ${JSON.stringify(personal)}`, async () => {
-  const mock = provider({ workspaces: [{ id: 'team' }, { id: 'account-1', ...personal }], expectedWorkspace: 'account-1' })
+for (const personal of [{ is_personal: true }, { title: 'Personal' }, { name: '个人' }, { type: 'personal' }]) test(`skips the personal workspace: ${JSON.stringify(personal)}`, async () => {
+  const mock = provider({ workspaces: [{ id: 'personal', ...personal }, { id: 'account-1' }], expectedWorkspace: 'account-1' })
   assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).type, 'auth_file')
 })
 
@@ -373,4 +373,16 @@ for (const ending of ['success', 'failure', 'cancel', 'deadline']) test(`${endin
   t.mock.timers.tick(600000)
   await Promise.resolve()
   assert.equal(mock.requests.some(r => r.url.pathname.endsWith('/resend')), false)
+})
+
+for (const known of [false, true]) test(`personal-only sessions never select a workspace (known ID: ${known})`, async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1', is_personal: true }] })
+  const result = await authorizeWithProtocol(makeTask(known ? { expectedAccountID: 'account-1' } : {}), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.error.code, 'TEAM_WORKSPACE_UNAVAILABLE')
+  assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
+})
+
+test('a token for a different workspace cannot replace the selected team identity', async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1' }], expectedWorkspace: 'account-1', accountID: 'personal-id' })
+  assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).error.code, 'IDENTITY_MISMATCH')
 })

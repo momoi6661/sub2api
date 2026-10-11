@@ -11,8 +11,10 @@ Only existing accounts are authorized. `/about-you`, signup and profile creation
 return `ACCOUNT_NOT_REGISTERED` without submitting registration data. CAPTCHA and
 unsatisfied Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`,
 preserving the HTTP status when available. Phone verification, passkeys, MFA and
-additional provider verification return `MANUAL_REQUIRED`. New accounts prefer a
-personal workspace (flag or title/name), otherwise the first offered workspace.
+additional provider verification return `MANUAL_REQUIRED`. New accounts select the first offered non-personal
+workspace. Personal workspaces (flag, type or title/name) are excluded, including
+when reauthorizing a known personal ID; no eligible workspace returns
+`TEAM_WORKSPACE_UNAVAILABLE`. Issued tokens must match the selected workspace ID.
 Reauthorization with a known account ID selects that workspace exactly; missing
 workspace lists and mismatched IDs stop with `WORKSPACE_LIST_UNAVAILABLE` and
 `WORKSPACE_ID_MISMATCH`. Password pages (including redirected

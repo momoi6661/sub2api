@@ -1,6 +1,7 @@
 <template>
   <BaseDialog
-    :show="show"
+    v-if="show"
+    :show="true"
     :title="t('admin.accounts.authProfiles.edit')"
     :z-index="60"
     :close-on-click-outside="false"

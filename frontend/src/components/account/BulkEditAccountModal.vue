@@ -37,10 +37,12 @@
           {{ t('admin.accounts.authProfiles.bulkTitle') }}
         </label>
         <div v-if="enableOneClickAuth" class="space-y-3 rounded-lg bg-primary-50 p-3 dark:bg-primary-950/20">
-          <select v-model="oneClickAuthProfile" class="input" required>
-            <option value="">{{ t('admin.accounts.authProfiles.profile') }}</option>
-            <option v-for="profile in authProfiles.filter(item => item.enabled)" :key="profile.id" :value="profile.id">{{ profile.name }}</option>
-          </select>
+          <ReauthProfileSelect
+            id="bulk-edit-one-click-auth-profile"
+            v-model="oneClickAuthProfile"
+            :profiles="authProfiles"
+            :disabled="authProfilesLoading"
+          />
           <input v-model="oneClickAuthLoginEmail" class="input" :placeholder="t('admin.accounts.authProfiles.loginEmail')" />
           <textarea v-model="oneClickAuthCustomInput" class="input min-h-20 font-mono" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />
           <input v-model.number="oneClickAuthWorkspaceIndex" class="input" type="number" min="1" step="1" :placeholder="t('admin.accounts.oneClickAuth.workspaceIndex')" />
@@ -1509,6 +1511,7 @@ import Select from '@/components/common/Select.vue'
 import ProxySelector from '@/components/common/ProxySelector.vue'
 import GroupSelector from '@/components/common/GroupSelector.vue'
 import { listReauthProfiles, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import ReauthProfileSelect from '@/components/account/ReauthProfileSelect.vue'
 import ModelWhitelistSelector from '@/components/account/ModelWhitelistSelector.vue'
 import Icon from '@/components/icons/Icon.vue'
 import {
@@ -1560,11 +1563,17 @@ const { t } = useI18n()
 const appStore = useAppStore()
 const enableOneClickAuth = ref(false)
 const authProfiles = ref<ReauthProfile[]>([])
+const authProfilesLoading = ref(false)
 const oneClickAuthProfile = ref('')
 const oneClickAuthLoginEmail = ref('')
 const oneClickAuthCustomInput = ref('')
 const oneClickAuthWorkspaceIndex = ref(1)
-watch(() => props.show, async show => { if (show && !authProfiles.value.length) { try { authProfiles.value = await listReauthProfiles() } catch { /* optional bulk section */ } } })
+watch(() => props.show, async show => {
+  if (!show || authProfiles.value.length) return
+  authProfilesLoading.value = true
+  try { authProfiles.value = await listReauthProfiles() } catch { /* optional bulk section */ }
+  finally { authProfilesLoading.value = false }
+})
 
 // Platform awareness
 const targetMode = computed(() => props.target?.mode ?? 'selected')

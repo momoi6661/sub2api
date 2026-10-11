@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
@@ -18,6 +19,8 @@ type OpenAIOAuthService struct {
 	proxyRepo            ProxyRepository
 	oauthClient          OpenAIOAuthClient
 	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
+	subscriptionOnce     sync.Once
+	subscriptionQueries  *openAISubscriptionQueries
 }
 
 // NewOpenAIOAuthService creates a new OpenAI OAuth service

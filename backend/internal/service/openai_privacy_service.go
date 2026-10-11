@@ -254,6 +254,8 @@ func fetchChatGPTSubscriptionExpiresAt(ctx context.Context, clientFactory Privac
 		SetHeader("Accept", "application/json").
 		SetSuccessResult(&result).
 		SetQueryParam("account_id", accountID).
+		SetHeader("x-openai-target-path", "/backend-api/subscriptions").
+		SetHeader("x-openai-target-route", "/backend-api/subscriptions").
 		Get(chatGPTSubscriptionsURL)
 	if err != nil {
 		slog.Warn("chatgpt_subscription_request_error", "error", err.Error())

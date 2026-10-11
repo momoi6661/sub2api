@@ -18,6 +18,15 @@
             @create="showCreate = true"
           >
             <template #after>
+              <label class="btn btn-secondary gap-2 px-2 md:px-3" :title="t('admin.accounts.refreshSubscriptionHint')">
+                <input
+                  type="checkbox"
+                  :checked="subscriptionRefreshEnabled"
+                  class="h-4 w-4 rounded border-gray-300 text-primary-600 focus:ring-primary-500"
+                  @change="setSubscriptionRefreshEnabled(($event.target as HTMLInputElement).checked)"
+                />
+                <span class="text-xs md:text-sm">{{ t('admin.accounts.refreshSubscription') }}</span>
+              </label>
               <!-- Auto Refresh Dropdown -->
               <div class="relative" ref="autoRefreshDropdownRef">
                 <button
@@ -255,7 +264,9 @@
               </span>
               <AccountSubscriptionExpiry
                 v-if="row.platform === 'openai' && row.type === 'oauth' && getAccountPlanType(row) !== 'free'"
-                :expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at"
+                :account-id="row.id"
+                :enabled="subscriptionRefreshEnabled"
+                :refresh-key="subscriptionRefreshToken"
               />
             </div>
           </template>
@@ -733,6 +744,7 @@ const autoRefreshDropdownRef = ref<HTMLElement | null>(null)
 const AUTO_REFRESH_STORAGE_KEY = 'account-auto-refresh'
 const autoRefreshIntervals = [5, 10, 15, 30] as const
 const autoRefreshEnabled = ref(false)
+const subscriptionRefreshEnabled = ref(true)
 const autoRefreshIntervalSeconds = ref<(typeof autoRefreshIntervals)[number]>(30)
 const autoRefreshCountdown = ref(0)
 const autoRefreshETag = ref<string | null>(null)
@@ -746,6 +758,7 @@ const todayStatsError = ref<string | null>(null)
 const todayStatsReqSeq = ref(0)
 const pendingTodayStatsRefresh = ref(false)
 const usageManualRefreshToken = ref(0)
+const subscriptionRefreshToken = ref(0)
 
 const desktopViewportQuery = '(min-width: 768px)'
 const isDesktopViewport = ref(
@@ -1042,8 +1055,9 @@ const loadSavedAutoRefresh = () => {
   try {
     const saved = localStorage.getItem(AUTO_REFRESH_STORAGE_KEY)
     if (!saved) return
-    const parsed = JSON.parse(saved) as { enabled?: boolean; interval_seconds?: number }
+    const parsed = JSON.parse(saved) as { enabled?: boolean; interval_seconds?: number; subscription_enabled?: boolean }
     autoRefreshEnabled.value = parsed.enabled === true
+    subscriptionRefreshEnabled.value = parsed.subscription_enabled !== false
     const interval = Number(parsed.interval_seconds)
     if (autoRefreshIntervals.includes(interval as any)) {
       autoRefreshIntervalSeconds.value = interval as any
@@ -1059,6 +1073,7 @@ const saveAutoRefreshToStorage = () => {
       AUTO_REFRESH_STORAGE_KEY,
       JSON.stringify({
         enabled: autoRefreshEnabled.value,
+        subscription_enabled: subscriptionRefreshEnabled.value,
         interval_seconds: autoRefreshIntervalSeconds.value
       })
     )
@@ -1082,6 +1097,11 @@ const setAutoRefreshEnabled = (enabled: boolean) => {
     pauseAutoRefresh()
     autoRefreshCountdown.value = 0
   }
+}
+
+const setSubscriptionRefreshEnabled = (enabled: boolean) => {
+  subscriptionRefreshEnabled.value = enabled
+  saveAutoRefreshToStorage()
 }
 
 const setAutoRefreshInterval = (seconds: (typeof autoRefreshIntervals)[number]) => {
@@ -1527,6 +1547,8 @@ const refreshAccountsIncrementally = async () => {
     upstreamBillingNow.value = Date.now()
 
     await refreshTodayStatsBatch()
+    // The subscription toggle is independent of list polling, including a list 304.
+    if (subscriptionRefreshEnabled.value) subscriptionRefreshToken.value += 1
   } catch (error) {
     console.error('Auto refresh failed:', error)
   } finally {
@@ -1538,6 +1560,7 @@ const handleManualRefresh = async () => {
   await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
   // Force usage cells to refetch /usage on explicit user refresh.
   usageManualRefreshToken.value += 1
+  if (subscriptionRefreshEnabled.value) subscriptionRefreshToken.value += 1
   await refreshVisibleUsageBatch()
 }
 

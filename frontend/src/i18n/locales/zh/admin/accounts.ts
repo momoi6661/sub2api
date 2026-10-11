@@ -240,6 +240,10 @@ export default {
       subscriptionRemainingDays: '剩余 {days} 天',
       subscriptionExpired: '订阅已到期',
       subscriptionExpiryUnavailable: '未获取到订阅到期时间',
+      subscriptionExpiryLoading: '正在查询订阅时间…',
+      subscriptionExpiryDisabled: '开启上方“刷新订阅”以查询到期时间',
+      refreshSubscription: '刷新订阅',
+      refreshSubscriptionHint: '开启后查询订阅时间，并在手动或自动刷新列表时重新请求；关闭后保留结果，不再请求。',
       // 容量状态提示
       capacity: {
         windowCost: {

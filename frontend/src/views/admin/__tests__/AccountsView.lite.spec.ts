@@ -10,6 +10,7 @@ const {
   listWithEtag,
   getById,
   getBatchTodayStats,
+  getBatchUsage,
   getUpstreamBillingProbeSettings,
   getAllProxies,
   getAllGroups,
@@ -21,6 +22,7 @@ const {
   listWithEtag: vi.fn(),
   getById: vi.fn(),
   getBatchTodayStats: vi.fn(),
+  getBatchUsage: vi.fn(),
   getUpstreamBillingProbeSettings: vi.fn(),
   getAllProxies: vi.fn(),
   getAllGroups: vi.fn(),
@@ -36,6 +38,7 @@ vi.mock('@/api/admin', () => ({
       getById,
       listWithEtag,
       getBatchTodayStats,
+      getBatchUsage,
       getUpstreamBillingProbeSettings,
       delete: vi.fn(),
       batchClearError: vi.fn(),
@@ -56,6 +59,13 @@ vi.mock('@/stores/auth', () => ({
   useAuthStore: () => ({ token: 'test-token', isSimpleMode: false })
 }))
 
+vi.mock('@/api/admin/reauthProfiles', async () => ({
+  ...await vi.importActual<typeof import('@/api/admin/reauthProfiles')>('@/api/admin/reauthProfiles'),
+  listAuthorizationTasks: vi.fn().mockResolvedValue({ items: [], active_count: 0 }),
+}))
+
+vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
+
 vi.mock('vue-i18n', async () => {
   const actual = await vi.importActual<typeof import('vue-i18n')>('vue-i18n')
   return { ...actual, useI18n: () => ({ t: (key: string) => key }) }
@@ -66,6 +76,7 @@ const DataTableStub = defineComponent({
   template: `
     <div>
       <div v-for="row in data" :key="row.id" :data-account-name="row.name">
+        <slot name="cell-name" :row="row" :value="row.name" />
         <slot name="cell-groups" :row="row" />
         <slot name="cell-actions" :row="row" />
       </div>
@@ -101,7 +112,8 @@ function mountView(stubActionMenu = true) {
         AppLayout: { template: '<div><slot /></div>' },
         TablePageLayout: { template: '<div><slot name="filters" /><slot name="table" /><slot name="pagination" /></div>' },
         DataTable: DataTableStub,
-        AccountTableActions: { template: '<div><slot name="after" /></div>' },
+        AccountTableActions: { emits: ['refresh'], template: '<div><button data-test="refresh-list" @click="$emit(\'refresh\')">Refresh</button><slot name="after" /></div>' },
+        AccountSubscriptionExpiry: defineComponent({ props: ['accountId', 'enabled', 'refreshKey'], template: '<div data-test="subscription" :data-enabled="enabled" :data-refresh="refreshKey" />' }),
         AccountTableFilters: true,
         AccountBulkActionsBar: true,
         Pagination: true,
@@ -128,6 +140,7 @@ function mountView(stubActionMenu = true) {
         UpstreamBillingRateCell: true,
         HelpTooltip: true,
         Icon: true,
+        RouterLink: true,
         Teleport: stubActionMenu
       }
     }
@@ -163,6 +176,7 @@ describe('admin AccountsView lite account list', () => {
     listWithEtag.mockReset().mockResolvedValue({ notModified: true, etag: 'compact-etag', data: null })
     getById.mockReset().mockResolvedValue(fullAccount)
     getBatchTodayStats.mockReset().mockResolvedValue({ stats: {} })
+    getBatchUsage.mockReset().mockResolvedValue({ usage: {}, errors: {} })
     getUpstreamBillingProbeSettings.mockReset().mockResolvedValue({ enabled: true })
     getAllProxies.mockReset().mockResolvedValue([])
     getAllGroups.mockReset().mockResolvedValue([{ id: 7, name: 'codex', platform: 'openai' }])
@@ -194,6 +208,42 @@ describe('admin AccountsView lite account list', () => {
     await flushPromises()
 
     expect(wrapper.get('[data-test="account-groups"]').text()).toBe('codex')
+    wrapper.unmount()
+  })
+
+  it('controls subscription refresh independently and persists its option', async () => {
+    localStorage.setItem('account-auto-refresh', JSON.stringify({ enabled: false, subscription_enabled: false }))
+    const wrapper = mountView()
+    await flushPromises()
+    const subscription = wrapper.get('[data-test="subscription"]')
+    expect(subscription.attributes('data-enabled')).toBe('false')
+    await wrapper.get('[data-test="refresh-list"]').trigger('click')
+    await flushPromises()
+    expect(subscription.attributes('data-refresh')).toBe('0')
+    const option = wrapper.get('label input[type="checkbox"]')
+    await option.setValue(true)
+    await wrapper.get('[data-test="refresh-list"]').trigger('click')
+    await flushPromises()
+    expect(subscription.attributes('data-enabled')).toBe('true')
+    expect(subscription.attributes('data-refresh')).toBe('1')
+    expect(JSON.parse(localStorage.getItem('account-auto-refresh')!)).toMatchObject({ enabled: false, subscription_enabled: true })
+    await option.setValue(false)
+    await wrapper.get('[data-test="refresh-list"]').trigger('click')
+    await flushPromises()
+    expect(subscription.attributes('data-refresh')).toBe('1')
+    wrapper.unmount()
+  })
+
+  it('refreshes subscription data on automatic list 304 responses', async () => {
+    vi.useFakeTimers()
+    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
+    localStorage.setItem('account-auto-refresh', JSON.stringify({ enabled: true, interval_seconds: 5, subscription_enabled: true }))
+    const wrapper = mountView()
+    await flushPromises()
+    await vi.advanceTimersByTimeAsync(6000)
+    await flushPromises()
+    expect(listWithEtag).toHaveBeenCalled()
+    expect(wrapper.get('[data-test="subscription"]').attributes('data-refresh')).toBe('1')
     wrapper.unmount()
   })
 

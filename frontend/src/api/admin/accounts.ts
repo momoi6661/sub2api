@@ -385,6 +385,20 @@ export async function getUsage(id: number, source?: 'passive' | 'active', force?
   return data
 }
 
+export interface AccountSubscriptionInfo {
+  subscription_expires_at: string
+  checked_at: string
+}
+
+export async function getSubscription(id: number, force = false, signal?: AbortSignal): Promise<AccountSubscriptionInfo> {
+  const { data } = await apiClient.get<AccountSubscriptionInfo>(`/admin/accounts/${id}/subscription`, {
+    params: force ? { force: true } : undefined,
+    timeout: 60_000,
+    signal
+  })
+  return data
+}
+
 export interface BatchAccountUsageResponse {
   usage: Record<string, AccountUsageInfo>
   errors: Record<string, string>
@@ -1150,6 +1164,7 @@ export const accountsAPI = {
   getStats,
   clearError,
   getUsage,
+  getSubscription,
   getBatchUsage,
   getTodayStats,
   getBatchTodayStats,

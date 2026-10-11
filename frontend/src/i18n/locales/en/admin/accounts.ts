@@ -399,6 +399,10 @@ export default {
       subscriptionRemainingDays: '{days} days remaining',
       subscriptionExpired: 'Subscription expired',
       subscriptionExpiryUnavailable: 'Subscription expiry unavailable',
+      subscriptionExpiryLoading: 'Querying subscription expiry…',
+      subscriptionExpiryDisabled: 'Enable Refresh subscription above to query expiry',
+      refreshSubscription: 'Refresh subscription',
+      refreshSubscriptionHint: 'Query subscription expiry on manual or automatic list refresh. Disable to keep the result without further requests.',
       // Capacity status tooltips
       capacity: {
         windowCost: {

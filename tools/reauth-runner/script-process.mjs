@@ -16,12 +16,12 @@ try {
   const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
   // No console output may become a credential-bearing process log.
   console.log = console.error = console.warn = () => {}
-  let customInput = { param: task.input ?? '' }
+  let customInput = task.input ?? ''
   if (typeof task.input === 'string' && task.input.trim()) {
     try {
       const parsed = JSON.parse(task.input)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) customInput = parsed
-    } catch { /* Raw text remains available as input.param. */ }
+      customInput = parsed
+    } catch { /* Raw text is passed through unchanged. */ }
   }
   const value = await new AsyncFunction('context', 'input', task.script)(task.context, customInput)
   if (value?.type === 'error' && typeof value.error?.code === 'string' && typeof value.error?.message === 'string') {

@@ -548,7 +548,7 @@ export default {
         script: 'Custom JavaScript',
         customInput: 'Custom input',
         customInputHint: 'For example {"param":"email----password----key"}; plain text, numbers and JSON are accepted.',
-        customInputDescription: 'Read it as input.param. Custom mode does not use mailbox, IMAP or password settings.',
+        customInputDescription: 'Read the raw value as input; if you enter JSON, access input.param yourself. Custom mode does not use mailbox, IMAP or password settings.',
         scriptKeep: 'Code is encrypted. Leave blank to retain it, or enter replacement code.',
         scriptHint: "Enter an async function body executed on the server. fetch is available without CORS. Only trusted administrator code is supported. Timeout: 30 seconds.",
         testEmail: 'Test account login email',

@@ -342,7 +342,7 @@ export default {
         script: '自定义 JavaScript',
         customInput: '自定义输入',
         customInputHint: '例如 {"param":"邮箱----密码----密钥"}，也可以填写任意文本、数字或 JSON。',
-        customInputDescription: '代码通过 input.param 读取；自定义模式不使用收件邮箱、IMAP 或密码配置。',
+        customInputDescription: '代码通过 input 读取原始自定义值；如果填写 JSON，可自行使用 input.param。自定义模式不使用收件邮箱、IMAP 或密码配置。',
         scriptKeep: '已加密保存代码。留空保留原代码，填写后替换。',
         scriptHint: "填写 async 函数体，在服务器执行并 await 返回结果；支持 fetch，无需 CORS。只执行受信任管理员代码，30 秒超时。",
         testEmail: '测试账号登录邮箱',

@@ -58,6 +58,7 @@
           tabindex="-1"
           @click.stop
           @mousedown.stop
+          @pointerdown.stop
           @keydown="onDropdownKeyDown"
         >
           <!-- Search input -->
@@ -83,6 +84,8 @@
               :aria-selected="isSelected(option)"
               :aria-disabled="isOptionDisabled(option)"
               @click.stop="!isOptionDisabled(option) && selectOption(option)"
+              @mousedown.stop
+              @pointerdown.stop
               @mouseenter="handleOptionMouseEnter(option, index)"
               :class="[
                 'select-option',

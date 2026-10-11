@@ -39,7 +39,7 @@
           <template #cell-proxy_ids="{ row }"><span class="text-sm text-gray-500 dark:text-dark-400">{{ proxyCount(row) ? t('admin.accounts.authProfiles.proxyCount', { count: proxyCount(row) }) : t('admin.accounts.authProfiles.accountProxy') }}</span></template>
           <template #cell-enabled="{ row }"><span :class="['badge', row.enabled ? 'badge-success' : 'badge-gray']">{{ t(row.enabled ? 'common.enabled' : 'common.disabled') }}</span></template>
           <template #cell-actions="{ row }">
-            <div class="flex items-center gap-1"><button type="button" class="btn btn-ghost btn-sm" @click.stop="edit(row)">{{ t('common.edit') }}</button><button type="button" class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20" @click.stop="askDelete(row)">{{ t('common.delete') }}</button></div>
+            <div class="flex items-center gap-1"><button type="button" class="btn btn-ghost btn-sm" @click.stop.prevent="edit(row)">{{ t('common.edit') }}</button><button type="button" class="btn btn-ghost btn-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-900/20" @click.stop.prevent="askDelete(row)">{{ t('common.delete') }}</button></div>
           </template>
           <template #empty>
             <div class="flex flex-col items-center gap-3 py-8">

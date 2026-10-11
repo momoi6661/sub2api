@@ -395,6 +395,10 @@ export default {
       setPrivacy: 'Set Privacy',
       subscriptionAbnormal: 'Abnormal',
       subscriptionExpires: 'Expires',
+      subscriptionExpiryDate: 'Subscription expires:',
+      subscriptionRemainingDays: '{days} days remaining',
+      subscriptionExpired: 'Subscription expired',
+      subscriptionExpiryUnavailable: 'Subscription expiry unavailable',
       // Capacity status tooltips
       capacity: {
         windowCost: {

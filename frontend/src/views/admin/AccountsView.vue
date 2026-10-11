@@ -227,7 +227,7 @@
             <span class="font-mono text-xs text-gray-500 dark:text-gray-400">#{{ value }}</span>
           </template>
           <template #cell-name="{ row, value }">
-            <div class="flex flex-col">
+            <div class="flex min-w-0 flex-col break-words">
               <HelpTooltip
                 v-if="accountHomepageUrl(row)"
                 :content="accountHomepageUrl(row)"
@@ -253,6 +253,10 @@
               >
                 {{ accountDisplayEmail(row) }}
               </span>
+              <AccountSubscriptionExpiry
+                v-if="row.platform === 'openai' && row.type === 'oauth' && getAccountPlanType(row) !== 'free'"
+                :expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at"
+              />
             </div>
           </template>
           <template #cell-notes="{ value }">
@@ -266,7 +270,7 @@
                   :auth-mode="getOpenAIAuthMode(row)"
                   :plan-type="getAccountPlanType(row)"
                   :privacy-mode="row.extra?.privacy_mode || row.parent_privacy_mode"
-                  :subscription-expires-at="row.credentials?.subscription_expires_at || row.parent_subscription_expires_at" />
+                  :subscription-expires-at="row.platform === 'openai' ? undefined : (row.credentials?.subscription_expires_at || row.parent_subscription_expires_at)" />
                 <span
                   v-if="getAntigravityTierLabel(row)"
                   :class="['inline-block rounded px-1.5 py-0.5 text-[10px] font-medium', getAntigravityTierClass(row)]"
@@ -557,6 +561,7 @@ import AccountCapacityCell from '@/components/account/AccountCapacityCell.vue'
 import UpstreamBillingRateCell from '@/components/account/UpstreamBillingRateCell.vue'
 import AccountPriorityCell from '@/components/account/AccountPriorityCell.vue'
 import PlatformTypeBadge from '@/components/common/PlatformTypeBadge.vue'
+import AccountSubscriptionExpiry from '@/components/account/AccountSubscriptionExpiry.vue'
 import Icon from '@/components/icons/Icon.vue'
 import ErrorPassthroughRulesModal from '@/components/admin/ErrorPassthroughRulesModal.vue'
 import TLSFingerprintProfilesModal from '@/components/admin/TLSFingerprintProfilesModal.vue'

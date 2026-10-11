@@ -236,6 +236,10 @@ export default {
       setPrivacy: '设置隐私',
       subscriptionAbnormal: '异常',
       subscriptionExpires: '到期',
+      subscriptionExpiryDate: '订阅到期：',
+      subscriptionRemainingDays: '剩余 {days} 天',
+      subscriptionExpired: '订阅已到期',
+      subscriptionExpiryUnavailable: '未获取到订阅到期时间',
       // 容量状态提示
       capacity: {
         windowCost: {

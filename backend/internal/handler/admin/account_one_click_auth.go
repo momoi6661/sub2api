@@ -315,9 +315,11 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if err != nil {
 		return nil, &service.ReauthExecutionError{Code: "INVALID_AUTH_FILE", Message: err.Error()}
 	}
-	// Keep the former code-login enrichment and privacy setup on the same proxy.
-	if resultType == "code" && h.openaiOAuthService != nil {
+	// Both protocol login and custom authorization files need subscription metadata.
+	// Identity has already been checked by normalizeReauthAuthFile above.
+	if h.openaiOAuthService != nil {
 		credentials := payload.Credentials
+		authorizedEmail := codexCredentialString(credentials, "email")
 		expires, _ := time.Parse(time.RFC3339, codexCredentialString(credentials, "expires_at"))
 		tokenInfo := &service.OpenAITokenInfo{
 			AccessToken: codexCredentialString(credentials, "access_token"), RefreshToken: codexCredentialString(credentials, "refresh_token"),
@@ -327,7 +329,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 			PlanType: codexCredentialString(credentials, "plan_type"),
 		}
 		h.openaiOAuthService.EnrichAuthorizedTokenInfo(ctx, tokenInfo, task.ProxyURL)
-		if !strings.EqualFold(email, tokenInfo.Email) || tokenInfo.ChatGPTAccountID != codexCredentialString(credentials, "chatgpt_account_id") {
+		if (authorizedEmail != "" && !strings.EqualFold(authorizedEmail, tokenInfo.Email)) || tokenInfo.ChatGPTAccountID != codexCredentialString(credentials, "chatgpt_account_id") {
 			return nil, &service.ReauthExecutionError{Code: "IDENTITY_MISMATCH", Message: "Authorized identity does not match this account"}
 		}
 		payload.Credentials = service.MergeCredentials(credentials, h.openaiOAuthService.BuildAccountCredentials(tokenInfo))

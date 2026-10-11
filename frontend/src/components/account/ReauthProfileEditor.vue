@@ -1,5 +1,11 @@
 <template>
-  <BaseDialog :show="show" :title="t('admin.accounts.authProfiles.edit')" @close="emit('close')">
+  <BaseDialog
+    :show="show"
+    :title="t('admin.accounts.authProfiles.edit')"
+    :z-index="60"
+    :close-on-click-outside="false"
+    @close="emit('close')"
+  >
     <form id="reauth-profile-form" class="space-y-4" @submit.prevent="save">
       <p class="input-hint">{{ t('admin.accounts.authProfiles.pending') }}</p>
       <div><label for="auth-profile-name" class="input-label">{{ t('admin.accounts.authProfiles.name') }}</label><input id="auth-profile-name" v-model="form.name" class="input" required maxlength="120" /></div>

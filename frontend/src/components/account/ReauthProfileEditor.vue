@@ -4,6 +4,7 @@
     :title="t('admin.accounts.authProfiles.edit')"
     :z-index="60"
     :close-on-click-outside="false"
+    :close-on-escape="false"
     @close="emit('close')"
   >
     <form id="reauth-profile-form" class="space-y-4" @submit.prevent="save">

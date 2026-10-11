@@ -70,6 +70,12 @@ export function readConsentForm(html, pageURL) {
     const streamed = streamedWorkspaces(nodes)
     if (streamed.length) return { action: action.href, workspaces: streamed }
     if (workspaces.length) return { action: action.href, workspaces }
+    // Personal-only consent can provide a Continue form without a workspace selector.
+    const fields = controls.filter(node => node.attribs.name && (
+      node.name === 'input' && ['hidden', 'submit'].includes(node.attribs.type) ||
+      node.name === 'button' && (!node.attribs.type || node.attribs.type === 'submit')
+    )).map(node => [node.attribs.name, node.attribs.value || ''])
+    return { action: action.href, workspaces: [], fields }
   }
   return null
 }

@@ -30,7 +30,7 @@ func TestAuthorizationWorkspaceIndexValidation(t *testing.T) {
 		valid bool
 	}{
 		{"", true}, {",\"workspace_index\":1", true}, {",\"workspace_index\":2", true},
-		{",\"workspace_index\":0", false}, {",\"workspace_index\":-1", false}, {",\"workspace_index\":1.5", false},
+		{",\"workspace_index\":0", true}, {",\"workspace_index\":-1", false}, {",\"workspace_index\":1.5", false},
 	} {
 		t.Run(tc.value, func(t *testing.T) {
 			w := httptest.NewRecorder()
@@ -61,7 +61,7 @@ func TestReauthWorkspaceSelection(t *testing.T) {
 		{"legacy identity", nil, 1, "old-workspace", false},
 		{"explicit second workspace", map[string]any{"one_click_auth_workspace_index": float64(2)}, 2, "", false},
 		{"explicit default", map[string]any{"one_click_auth_workspace_index": 1}, 1, "", false},
-		{"zero rejected", map[string]any{"one_click_auth_workspace_index": 0}, 0, "", true},
+		{"personal selected", map[string]any{"one_click_auth_workspace_index": 0}, 0, "", false},
 		{"fraction rejected", map[string]any{"one_click_auth_workspace_index": 1.5}, 0, "", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

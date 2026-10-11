@@ -94,6 +94,13 @@ function provider(options = {}) {
       return json({ continue_url: `${callback}?code=oauth-code&state=${options.badState ? 'different' : auth.searchParams.get('state')}` })
     }
     if (url.pathname === '/sign-in-with-chatgpt/codex/consent') {
+      if (options.personalConsent && init.method === 'POST') {
+        const form = new URLSearchParams(init.body)
+        assert.equal(form.get('csrf'), 'test-csrf')
+        assert.equal(form.get('intent'), 'allow')
+        assert.equal(form.has('workspace_id'), false)
+        return redirect(`${callback}?code=oauth-code&state=${auth.searchParams.get('state')}`)
+      }
       return new Response(options.consentHTML || '<html>Consent</html>')
     }
     if (url.pathname === '/api/accounts/workspace/select') {
@@ -399,7 +406,7 @@ test('an out-of-range index never falls back to personal or the first workspace'
   assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
 })
 
-for (const workspaceIndex of [0, -1, 1.5, '2']) test(`invalid workspace index stops before login: ${workspaceIndex}`, async () => {
+for (const workspaceIndex of [-1, 1.5, '2']) test(`invalid workspace index stops before login: ${workspaceIndex}`, async () => {
   const mock = provider()
   assert.equal((await authorizeWithProtocol(makeTask({ workspaceIndex }), mock.reader, undefined, mock.report, mock.fetch)).error.code, 'INVALID_WORKSPACE_INDEX')
   assert.equal(mock.requests.length, 0)
@@ -432,4 +439,22 @@ test('an external consent form cannot receive the workspace or session credentia
   const mock = provider({ consentHTML: modernConsent.replace('action="/sign-in-with-chatgpt/codex/consent"', 'action="https://other.example/consent"') })
   assert.equal((await authorizeWithProtocol(makeTask(), mock.reader, undefined, mock.report, mock.fetch)).error.code, 'WORKSPACE_LIST_UNAVAILABLE')
   assert.equal(mock.requests.some(r => r.url.pathname === '/sign-in-with-chatgpt/codex/consent' && r.init.method === 'POST'), false)
+})
+
+for (const workspaceIndex of [0, 1, 4]) test(`personal-only sessions fall back to personal with index ${workspaceIndex}`, async () => {
+  const mock = provider({ workspaces: [{ id: 'account-1', is_personal: true }], expectedWorkspace: 'account-1' })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file')
+})
+test('zero explicitly selects personal even with teams available', async () => {
+  const mock = provider({ workspaces: [{ id: 'team-a' }, { id: 'account-1', is_personal: true }], expectedWorkspace: 'account-1' })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex: 0 }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file')
+})
+
+for (const workspaceIndex of [0, 1]) test(`personal consent without a workspace picker completes with index ${workspaceIndex}`, async () => {
+  const mock = provider({ workspaces: [], personalConsent: true, consentHTML: '<form method="post"><input type="hidden" name="csrf" value="test-csrf"><button type="submit" name="intent" value="allow">Continue</button></form>' })
+  const result = await authorizeWithProtocol(makeTask({ workspaceIndex }), mock.reader, undefined, mock.report, mock.fetch)
+  assert.equal(result.type, 'auth_file', JSON.stringify(result))
+  assert.equal(mock.requests.some(r => r.url.pathname === '/api/accounts/workspace/select'), false)
 })

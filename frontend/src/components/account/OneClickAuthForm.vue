@@ -17,7 +17,7 @@
     </div>
     <div>
       <label for="new-account-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
-      <input id="new-account-workspace-index" v-model.number="workspaceIndex" class="input" type="number" min="1" step="1" required :disabled="busy" />
+      <input id="new-account-workspace-index" v-model.number="workspaceIndex" class="input" type="number" min="0" step="1" placeholder="1" :disabled="busy" />
       <p class="input-hint">{{ t('admin.accounts.oneClickAuth.workspaceIndexHint') }}</p>
     </div>
     <p class="input-hint">{{ t('admin.accounts.authProfiles.browser') }}</p>
@@ -52,7 +52,7 @@ const profiles = ref<ReauthProfile[]>([])
 const profileID = ref(props.initialProfileID), loginEmail = ref(props.initialLoginEmail)
 const customInput = ref(props.initialCustomInput)
 const customMode = computed(() => profiles.value.find(p => p.id === profileID.value)?.mailbox_mode === 'api')
-const workspaceIndex = ref(props.initialWorkspaceIndex)
+const workspaceIndex = ref<number | ''>(props.initialWorkspaceIndex)
 const loading = ref(false), authorizing = ref(false), showEditor = ref(false)
 const loadError = ref(''), error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const authorization = shallowRef<NewAccountAuthorization | null>(null)
@@ -92,21 +92,21 @@ async function authorize() {
   authorizing.value = true; error.value = ''; errorCode.value = ''
   try {
     if (props.accountID) {
-      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email, workspace_index: workspaceIndex.value, ...(customMode.value ? { custom_input: customInput.value } : {}) })
+      const [task] = await submitAuthorizationTasks([props.accountID], { profile_id: selectedProfile, login_email: email, workspace_index: workspaceIndex.value === '' ? 1 : workspaceIndex.value, ...(customMode.value ? { custom_input: customInput.value } : {}) })
       if (!disposed) emit('submitted', task)
       return
     }
     if (!authorization.value) {
       const result = await authorizeNewAccount(selectedProfile, email, props.proxyID, taskController.signal, progress => {
         if (!disposed && !taskController.signal.aborted) taskStage.value = progress.stage
-      }, workspaceIndex.value, customMode.value ? customInput.value : undefined)
+      }, workspaceIndex.value === '' ? 1 : workspaceIndex.value, customMode.value ? customInput.value : undefined)
       if (disposed || taskController.signal.aborted) return
       authorization.value = result
     }
     taskStage.value = 'verifying'
     if (!disposed && !taskController.signal.aborted) {
       // Retain the result if creation fails, so retrying does not repeat OAuth.
-      emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email, workspaceIndex.value, customMode.value ? customInput.value : undefined)
+      emit('authorized', { ...authorization.value, credentials: { ...authorization.value.credentials } }, selectedProfile, email, workspaceIndex.value === '' ? 1 : workspaceIndex.value, customMode.value ? customInput.value : undefined)
     }
   } catch (e) {
     if (!disposed && !taskController.signal.aborted) {

@@ -29,3 +29,9 @@ test('malformed stream data never executes code and falls back to the rendered f
  assert.deepEqual(readConsentForm(html,url).workspaces,[{id:'team',title:''}])
  assert.equal(globalThis.executed,undefined)
 })
+
+test('personal consent form preserves hidden fields without inventing a workspace', () => {
+ const form=readConsentForm('<form method="post"><input type="hidden" name="csrf" value="secret&amp;value"><button type="submit" name="intent" value="allow">Continue</button></form>',url)
+ assert.deepEqual(form.workspaces,[])
+ assert.deepEqual(form.fields,[['csrf','secret&value'],['intent','allow']])
+})

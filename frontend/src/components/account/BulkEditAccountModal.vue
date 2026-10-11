@@ -45,7 +45,7 @@
           />
           <input v-model="oneClickAuthLoginEmail" class="input" :placeholder="t('admin.accounts.authProfiles.loginEmail')" />
           <textarea v-model="oneClickAuthCustomInput" class="input min-h-20 font-mono" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />
-          <input v-model.number="oneClickAuthWorkspaceIndex" class="input" type="number" min="1" step="1" :placeholder="t('admin.accounts.oneClickAuth.workspaceIndex')" />
+          <input v-model.number="oneClickAuthWorkspaceIndex" class="input" type="number" min="0" step="1" :placeholder="t('admin.accounts.oneClickAuth.workspaceIndex')" />
         </div>
       </div>
 
@@ -1567,7 +1567,7 @@ const authProfilesLoading = ref(false)
 const oneClickAuthProfile = ref('')
 const oneClickAuthLoginEmail = ref('')
 const oneClickAuthCustomInput = ref('')
-const oneClickAuthWorkspaceIndex = ref(1)
+const oneClickAuthWorkspaceIndex = ref<number | ''>(1)
 watch(() => props.show, async show => {
   if (!show || authProfiles.value.length) return
   authProfilesLoading.value = true
@@ -1977,7 +1977,7 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.one_click_auth_profile_id = oneClickAuthProfile.value
     extra.one_click_auth_login_email = oneClickAuthLoginEmail.value.trim()
     extra.one_click_auth_custom_input = oneClickAuthCustomInput.value
-    extra.one_click_auth_workspace_index = Math.max(1, Math.floor(oneClickAuthWorkspaceIndex.value || 1))
+    extra.one_click_auth_workspace_index = Math.max(0, Math.floor(oneClickAuthWorkspaceIndex.value === '' ? 1 : oneClickAuthWorkspaceIndex.value ?? 1))
   }
 
   if (enableProxy.value) {

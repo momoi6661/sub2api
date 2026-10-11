@@ -1714,7 +1714,7 @@
           <textarea v-if="oneClickCustomMode" v-model="oneClickCustomInput" class="input min-h-24 font-mono" maxlength="16384" />
           <input v-else id="one-click-login-email" v-model="oneClickLoginEmail" type="email" class="input" />
           <label for="one-click-workspace-index" class="input-label">{{ t('admin.accounts.oneClickAuth.workspaceIndex') }}</label>
-          <input id="one-click-workspace-index" v-model.number="oneClickWorkspaceIndex" type="number" min="1" step="1" required class="input" />
+          <input id="one-click-workspace-index" v-model.number="oneClickWorkspaceIndex" type="number" min="0" step="1" placeholder="1" class="input" />
           <p class="input-hint">{{ t('admin.accounts.oneClickAuth.workspaceIndexHint') }}</p>
           <p class="input-hint">{{ t('admin.accounts.authProfiles.isolation') }}</p>
         </div>
@@ -3711,7 +3711,7 @@ const oneClickAuthProfile = ref('')
 const oneClickLoginEmail = ref('')
 const oneClickCustomInput = ref('')
 const oneClickCustomMode = computed(() => authProfiles.value.find(p => p.id === oneClickAuthProfile.value)?.mailbox_mode === 'api')
-const oneClickWorkspaceIndex = ref(1)
+const oneClickWorkspaceIndex = ref<number | ''>(1)
 const authProfiles = ref<ReauthProfile[]>([])
 const authProfilesLoading = ref(false)
 const authProfilesError = ref('')
@@ -4264,7 +4264,7 @@ const syncFormFromAccount = (newAccount: Account | null) => {
 	oneClickAuthEnabled.value = extra?.one_click_auth_enabled === true
 	oneClickAuthProfile.value = typeof extra?.one_click_auth_profile_id === 'string' ? extra.one_click_auth_profile_id : ''
   oneClickCustomInput.value = String(extra?.one_click_auth_custom_input ?? '')
-  oneClickWorkspaceIndex.value = Number(extra?.one_click_auth_workspace_index || 1)
+  oneClickWorkspaceIndex.value = Number(extra?.one_click_auth_workspace_index ?? 1)
   oneClickLoginEmail.value = typeof extra?.one_click_auth_login_email === 'string' ? extra.one_click_auth_login_email : (typeof credentials?.email === 'string' ? credentials.email : '')
 	mixedScheduling.value = extra?.mixed_scheduling === true
 	allowOverages.value = extra?.allow_overages === true
@@ -5981,7 +5981,7 @@ const handleSubmit = async () => {
       newExtra.one_click_auth_profile_id = oneClickAuthProfile.value
       newExtra.one_click_auth_login_email = oneClickLoginEmail.value.trim()
       newExtra.one_click_auth_custom_input = oneClickCustomInput.value
-      newExtra.one_click_auth_workspace_index = oneClickWorkspaceIndex.value
+      newExtra.one_click_auth_workspace_index = oneClickWorkspaceIndex.value === '' ? 1 : oneClickWorkspaceIndex.value
       delete newExtra.one_click_auth_profile
       updatePayload.extra = newExtra
     }

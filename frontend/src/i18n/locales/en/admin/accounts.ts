@@ -212,7 +212,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
           WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
           WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
-          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be a non-negative integer; 0 selects personal space.",
 
           OPENCODE_GO_USAGE_REFRESH_RATE_LIMITED: 'Refresh is limited. Try again in {retry_after_seconds} seconds.',
           forbidden: 'Upstream returned 403: could be a missing/expired OpenCode Go subscription or a WAF/access-policy block; check the network path and HTTP status.'
@@ -334,7 +334,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
           WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
           WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
-          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be a non-negative integer; 0 selects personal space.",
 
           request_failed: 'Request failed',
           empty_response: 'Empty response',
@@ -629,7 +629,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
           WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
           WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
-          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be a non-negative integer; 0 selects personal space.",
 
           PROXY_CONNECTION_FAILED: "Connection through the selected proxy failed or timed out. Check its address and connectivity.",
           PROXY_AUTH_FAILED: "Proxy authentication failed. Check the proxy username and password.",
@@ -701,7 +701,7 @@ export default {
         progressHint: "Stages are reported by the server. Protocol authorization and mail delivery may take time; tasks have a 10-minute limit.",
         createHint: 'Select a saved profile and enter the new account login email. Successful authorization creates the account and saves its profile binding. Automatic recovery defaults to off.',
         workspaceIndex: 'Workspace index',
-        workspaceIndexHint: 'Default 1. Enter a position from 1 to the available workspace count. Select from team/organization workspaces in provider order, or personal workspaces when no team is available. Out-of-range positions fail.',
+        workspaceIndexHint: '0 selects personal space. Blank defaults to 1, preferring the first team/organization workspace. With no team workspace, use personal space. 1 to n selects teams in provider order.',
         authorizeAndCreate: 'Authorize and add account',
         authorizing: 'Authorizing, up to 10 minutes. Close this dialog to cancel.',
         readyToCreate: 'Credentials are ready. If creation fails, click Create again without repeating authorization.',
@@ -1426,7 +1426,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
           WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
           WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
-          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be a non-negative integer; 0 selects personal space.",
 
             OPENAI_OAUTH_PROXY_REQUIRED:
               'No proxy is configured and this server could not reach OpenAI directly, so the OpenAI OAuth request failed. Select a proxy that can access OpenAI and retry; if the authorization code has expired, regenerate the authorization URL.'
@@ -1524,7 +1524,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "The email code was submitted, but the session did not provide a readable workspace list. Credentials were not saved.",
           WORKSPACE_ID_MISMATCH: "The original workspace is absent from this session. Set a workspace index in account settings and retry.",
           WORKSPACE_INDEX_OUT_OF_RANGE: "The workspace index exceeds the available count. Update the index in account settings.",
-          INVALID_WORKSPACE_INDEX: "The workspace index must be an integer greater than or equal to 1.",
+          INVALID_WORKSPACE_INDEX: "The workspace index must be a non-negative integer; 0 selects personal space.",
 
             GROK_OAUTH_SESSION_NOT_FOUND:
               'Grok OAuth session was not found or has expired. Generate a new auth URL and paste the newest callback URL.',

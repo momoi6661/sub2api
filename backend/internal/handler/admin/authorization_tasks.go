@@ -217,7 +217,7 @@ func (h *AccountHandler) SubmitAuthorizationTasks(c *gin.Context) {
 		ProfileID      string  `json:"profile_id" binding:"max=128"`
 		LoginEmail     string  `json:"login_email" binding:"max=254"`
 		CustomInput    *string `json:"custom_input" binding:"omitempty,max=16384"`
-		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
+		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=0"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32*1024)
 	if err := c.ShouldBindJSON(&input); err != nil {

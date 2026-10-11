@@ -129,7 +129,7 @@ func (h *AccountHandler) AuthorizeNewAccount(c *gin.Context) {
 		LoginEmail     string  `json:"login_email" binding:"max=254"`
 		CustomInput    *string `json:"custom_input" binding:"omitempty,max=16384"`
 		ProxyID        *int64  `json:"proxy_id"`
-		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=1"`
+		WorkspaceIndex *int    `json:"workspace_index" binding:"omitempty,min=0"`
 	}
 	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 32*1024)
 	if err := c.ShouldBindJSON(&input); err != nil {
@@ -386,8 +386,8 @@ func reauthWorkspaceSelection(account *service.Account) (int, string, error) {
 	}
 	index := 1
 	encoded, err := json.Marshal(value)
-	if err != nil || json.Unmarshal(encoded, &index) != nil || index < 1 {
-		return 0, "", &service.ReauthExecutionError{Code: "INVALID_WORKSPACE_INDEX", Message: "Workspace index must be a positive integer"}
+	if err != nil || json.Unmarshal(encoded, &index) != nil || index < 0 {
+		return 0, "", &service.ReauthExecutionError{Code: "INVALID_WORKSPACE_INDEX", Message: "Workspace index must be a non-negative integer (0 selects personal)"}
 	}
 	return index, "", nil
 }

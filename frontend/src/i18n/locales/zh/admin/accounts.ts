@@ -175,7 +175,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
           WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
           WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
-          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是非负整数，0 表示个人空间。",
 
           request_failed: '请求失败',
           empty_response: '响应为空',
@@ -423,7 +423,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
           WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
           WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
-          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是非负整数，0 表示个人空间。",
 
           PROXY_CONNECTION_FAILED: "代理连接失败或超时，请检查选定代理的地址和连通性。",
           PROXY_AUTH_FAILED: "代理认证失败，请检查代理用户名和密码。",
@@ -495,7 +495,7 @@ export default {
         progressHint: "阶段由服务器实时返回；协议授权和收件可能耗时较长，任务最长 10 分钟。",
         createHint: '选择已保存的授权配置，输入待添加账号的登录邮箱。成功后创建账号并绑定该配置；失效自动授权默认关闭。',
         workspaceIndex: '工作区序号',
-        workspaceIndexHint: '默认 1，填写 1 到可选工作区数量。优先在团队/组织工作区中按返回顺序选择；只有个人工作区时选择个人。超出数量会报错。',
+        workspaceIndexHint: '0 表示个人空间；留空默认 1，优先选择第一个团队/组织工作区。没有团队工作区时自动选择个人空间。1 到 n 按团队工作区返回顺序选择。',
         authorizeAndCreate: '一键授权并添加',
         authorizing: '正在授权，最长 10 分钟。关闭窗口可取消本次任务。',
         readyToCreate: '授权凭据已获取。若添加失败，可再次点击添加，无需重复授权。',
@@ -623,7 +623,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
           WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
           WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
-          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是非负整数，0 表示个人空间。",
 
           OPENCODE_GO_USAGE_REFRESH_RATE_LIMITED: '刷新过于频繁，请在 {retry_after_seconds} 秒后重试。',
           forbidden: '上游返回 403：可能是订阅缺失/失效，也可能是 WAF 或访问策略拦截，请结合网络路径与 HTTP 状态排查。'
@@ -1522,7 +1522,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
           WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
           WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
-          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是非负整数，0 表示个人空间。",
 
             OPENAI_OAUTH_PROXY_REQUIRED:
               '未设置代理，当前服务器无法直连 OpenAI，导致 OpenAI OAuth 请求失败。请先选择可访问 OpenAI 的代理后重试；如果授权码已失效，请重新生成授权链接。'
@@ -1619,7 +1619,7 @@ export default {
           WORKSPACE_LIST_UNAVAILABLE: "验证码已提交，但授权会话没有提供可解析的工作区列表，本次凭据未保存。",
           WORKSPACE_ID_MISMATCH: "原账号的工作区不在当前授权列表中。可在账号配置里填写工作区序号后重新申请。",
           WORKSPACE_INDEX_OUT_OF_RANGE: "工作区序号超出了可选数量，请修改账号配置里的工作区序号。",
-          INVALID_WORKSPACE_INDEX: "工作区序号必须是大于或等于 1 的整数。",
+          INVALID_WORKSPACE_INDEX: "工作区序号必须是非负整数，0 表示个人空间。",
 
             GROK_OAUTH_SESSION_NOT_FOUND:
               'Grok OAuth 会话不存在或已过期。请重新生成授权链接，并粘贴最新的回调链接。',

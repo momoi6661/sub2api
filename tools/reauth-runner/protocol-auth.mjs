@@ -43,7 +43,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
   try {
     signal?.throwIfAborted()
     const workspaceIndex = task.context.workspaceIndex ?? 1
-    if (!Number.isSafeInteger(workspaceIndex) || workspaceIndex < 1) reject('INVALID_WORKSPACE_INDEX', 'Workspace index must be a positive integer')
+    if (!Number.isSafeInteger(workspaceIndex) || workspaceIndex < 0) reject('INVALID_WORKSPACE_INDEX', 'Workspace index must be a non-negative integer (0 selects personal)')
     if (task.mailbox) {
       report('mailbox_connect')
       const snapshot = await executeScript({ ...task, operation: 'mailbox_snapshot' }, { timeout: 10000, signal })
@@ -70,6 +70,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
     }).toString()
 
     const request = async (target, options = {}) => {
+      const { allowHTMLResponse, ...fetchOptions } = options
       signal?.throwIfAborted()
       const url = new URL(target, origin)
       if (url.origin !== origin || url.username || url.password) reject('OAUTH_REDIRECT_INVALID', 'Authorization redirected outside the supported provider')
@@ -77,7 +78,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       const cookies = await jar.getCookieString(url.href)
       const requestDeviceID = deviceID || (await jar.getCookies(url.href)).find(cookie => cookie.key === 'oai-did')?.value
       const response = await fetch(url.href, {
-        ...options, redirect: 'manual', size: 1024 * 1024,
+        ...fetchOptions, redirect: 'manual', size: 1024 * 1024,
         signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30000)]) : AbortSignal.timeout(30000),
         headers: { ...browserHeaders, Accept: options.method === 'POST' ? 'application/json' : 'text/html,application/xhtml+xml', 'Accept-Language': 'en-US,en;q=0.9',
             'Sec-Fetch-Dest': options.method === 'POST' ? 'empty' : 'document',
@@ -99,7 +100,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
       try { data = JSON.parse(text) } catch {
         // Only an actually empty successful API response may take the empty
         // send/resend fallback. An HTML error page is not delivery confirmation.
-        if (options.method === 'POST' && response.ok && text.trim()) {
+        if (options.method === 'POST' && response.ok && text.trim() && !allowHTMLResponse) {
           const result = failure('PROVIDER_INVALID_RESPONSE', 'The authorization API returned a non-JSON response')
           result.error.httpStatus = response.status
           throw Object.assign(new Error(result.error.message), { result })
@@ -237,25 +238,42 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         } catch { /* Cookie format is provider-owned. */ }
       }
       const consentForm = readConsentForm(step.text || '', step.url.href)
-      if (consentForm) workspaces = consentForm.workspaces
-      if (!workspaces.length) reject('WORKSPACE_LIST_UNAVAILABLE', 'The authorization session did not provide a usable workspace list', true)
-      const expectedID = task.context.expectedAccountID
-      const isPersonal = item => item.is_personal === true || item.type === 'personal' ||
-        /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))
-      // Team workspaces take priority; personal is allowed when it is the only option.
-      // Keep a known account identity stable when reauthorizing.
-      const teams = workspaces.filter(item => !isPersonal(item))
-      const eligible = teams.length ? teams : workspaces
-      const workspace = expectedID ? workspaces.find(item => item.id === expectedID) : eligible[workspaceIndex - 1]
-      if (!workspace) reject(expectedID ? 'WORKSPACE_ID_MISMATCH' : 'WORKSPACE_INDEX_OUT_OF_RANGE', expectedID
-        ? 'The existing account workspace is not available in this authorization session'
-        : `Workspace index ${workspaceIndex} exceeds the ${eligible.length} available workspaces`)
-      selectedWorkspaceID = workspace.id
-      const selected = await post('/api/accounts/workspace/select', { workspace_id: workspace.id }, step.url)
-      const target = selected.response.headers.get('location') || nextURL(selected.data)
-      if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not return an authorization callback')
-      step = await follow(target)
-      if (!step.code) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not complete authorization after workspace selection')
+      if (consentForm?.workspaces.length) workspaces = consentForm.workspaces
+      if (!workspaces.length && consentForm?.fields && workspaceIndex <= 1) {
+        // Follow the provider's own personal-only consent form, never invent a workspace ID.
+        const confirmed = await request(consentForm.action, {
+          method: 'POST', allowHTMLResponse: true,
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded', Origin: origin, Referer: step.url.href },
+          body: new URLSearchParams(consentForm.fields).toString()
+        })
+        const target = confirmed.response.headers.get('location') || nextURL(confirmed.data)
+        if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'Personal consent did not return an authorization callback')
+        step = await follow(target)
+        if (!step.code) reject('PROTOCOL_STEP_UNSUPPORTED', 'Personal consent did not complete authorization')
+      } else {
+        if (!workspaces.length) reject('WORKSPACE_LIST_UNAVAILABLE', 'The authorization session did not provide a usable workspace list or personal consent form', true)
+        const expectedID = task.context.expectedAccountID
+        const isPersonal = item => item.is_personal === true || item.type === 'personal' ||
+          /\bpersonal\b|个人/i.test(String(item.title || item.name || ''))
+        // Team workspaces take priority; personal is allowed when it is the only option.
+        // Keep a known account identity stable when reauthorizing.
+        const personal = workspaces.filter(isPersonal)
+        const teams = workspaces.filter(item => !isPersonal(item))
+        const eligible = workspaceIndex === 0 ? personal : teams.length ? teams : personal
+        const workspace = expectedID ? workspaces.find(item => item.id === expectedID)
+          : workspaceIndex === 0 ? personal[0]
+            : teams.length ? teams[workspaceIndex - 1]
+              : personal[workspaceIndex - 1] || personal[0]
+        if (!workspace) reject(expectedID ? 'WORKSPACE_ID_MISMATCH' : 'WORKSPACE_INDEX_OUT_OF_RANGE', expectedID
+          ? 'The existing account workspace is not available in this authorization session'
+          : `Workspace index ${workspaceIndex} exceeds the ${eligible.length} available workspaces`)
+        selectedWorkspaceID = workspace.id
+        const selected = await post('/api/accounts/workspace/select', { workspace_id: workspace.id }, step.url)
+        const target = selected.response.headers.get('location') || nextURL(selected.data)
+        if (!target) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not return an authorization callback')
+        step = await follow(target)
+        if (!step.code) reject('PROTOCOL_STEP_UNSUPPORTED', 'The provider did not complete authorization after workspace selection')
+      }
     }
 
     report('token_exchange')

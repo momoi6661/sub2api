@@ -247,7 +247,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if profile.MailboxMode == "imap" || resultType == "" {
 		resultType = "code"
 	}
-	task := service.ReauthRunnerTask{ResendAfterSeconds: profile.EmailResendSeconds, Mode: "protocol", Script: material["code_script"], ResultType: resultType, Context: map[string]any{
+	task := service.ReauthRunnerTask{ResendAfterSeconds: profile.EmailResendSeconds, Mode: "protocol", Script: material["code_script"], ResultType: resultType, Input: material["custom_input"], Context: map[string]any{
 		"accountId": account.ID, "loginEmail": email, "since": time.Now().UTC().Format(time.RFC3339), "apiURL": material["api_url"], "mailboxAddress": material["mailbox_address"], "secret": material["secret"],
 	}}
 	workspaceIndex, expectedWorkspaceID, err := reauthWorkspaceSelection(account)

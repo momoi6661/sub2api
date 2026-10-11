@@ -13,6 +13,7 @@ export interface ReauthProfile {
   imap_username: string
   api_url: string
   code_script?: string
+  custom_input?: string
   has_code_script?: boolean
   folder: string
   sender_filter: string

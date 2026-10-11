@@ -40,6 +40,7 @@ type ReauthRunnerTask struct {
 	Mode               string               `json:"mode"`
 	Script             string               `json:"script"`
 	ResultType         string               `json:"resultType"`
+	Input              string               `json:"input,omitempty"`
 	Context            map[string]any       `json:"context"`
 	ProxyURL           string               `json:"proxyURL,omitempty"`
 }

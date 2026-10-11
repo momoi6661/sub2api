@@ -34,6 +34,7 @@ type ReauthProfile struct {
 	IMAPUsername       string  `json:"imap_username"`
 	APIURL             string  `json:"api_url"`
 	CodeScript         string  `json:"code_script,omitempty"`
+	CustomInput        string  `json:"custom_input,omitempty"`
 	HasCodeScript      bool    `json:"has_code_script"`
 	Folder             string  `json:"folder"`
 	SenderFilter       string  `json:"sender_filter"`
@@ -129,6 +130,9 @@ func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profi
 			profile.IMAPUsername = profile.MailboxAddress
 		}
 	}
+	if len(profile.CustomInput) > 16384 {
+		return bad("custom input exceeds size limit")
+	}
 	if len(profile.CodePattern) > 500 || len(profile.Secret) > 8192 || len(profile.CodeScript) > 16384 {
 		return bad("profile field exceeds size limit")
 	}
@@ -215,6 +219,12 @@ func (s *SettingService) SaveReauthProfile(ctx context.Context, id string, profi
 			}
 		}
 	}
+	if profile.MailboxMode == "api" {
+		// Custom scripts receive their own input scope; mailbox credentials are not used.
+		stored.EncryptedSecret = ""
+		profile.MailboxAddress = ""
+		profile.IMAPUsername = ""
+	}
 	profile.ID, profile.Secret = id, ""
 	profile.CodeScript = ""
 	profile.HasCodeScript = stored.EncryptedScript != ""
@@ -280,7 +290,7 @@ func (s *SettingService) readReauthMaterial(ctx context.Context, id string, scri
 	if err != nil {
 		return nil, err
 	}
-	return map[string]string{"code_script": script, "secret": secret, "api_url": stored.APIURL, "mailbox_address": stored.MailboxAddress}, nil
+	return map[string]string{"code_script": script, "secret": secret, "api_url": stored.APIURL, "mailbox_address": stored.MailboxAddress, "custom_input": stored.CustomInput}, nil
 }
 
 func (s *SettingService) decryptReauthValue(id, encoded, purpose string) (string, error) {

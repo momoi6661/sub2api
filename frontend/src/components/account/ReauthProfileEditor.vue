@@ -4,7 +4,7 @@
       <p class="input-hint">{{ t('admin.accounts.authProfiles.pending') }}</p>
       <div><label for="auth-profile-name" class="input-label">{{ t('admin.accounts.authProfiles.name') }}</label><input id="auth-profile-name" v-model="form.name" class="input" required maxlength="120" /></div>
       <label class="flex items-center gap-2"><input v-model="form.enabled" type="checkbox" />{{ t('admin.accounts.authProfiles.enabled') }}</label>
-      <div><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" :required="form.mailbox_mode !== 'api' || form.api_result_type !== 'auth_file'" /></div>
+      <div v-if="form.mailbox_mode !== 'api'"><label for="auth-profile-mailbox" class="input-label">{{ t('admin.accounts.authProfiles.mailbox') }}</label><input id="auth-profile-mailbox" v-model="form.mailbox_address" class="input" type="email" required /></div>
       <p v-if="form.mailbox_mode === 'imap' || form.api_result_type !== 'auth_file'" class="input-hint">{{ t('admin.accounts.authProfiles.mailboxHint') }}</p>
       <div>
         <label for="auth-profile-mode" class="input-label">{{ t('admin.accounts.authProfiles.mode') }}</label>
@@ -18,6 +18,9 @@
         <label for="auth-profile-result" class="input-label">{{ t('admin.accounts.authProfiles.resultType') }}</label>
         <Select id="auth-profile-result" v-model="form.api_result_type" :options="resultTypeOptions" :searchable="false" :disabled="saving || testing" :aria-label="t('admin.accounts.authProfiles.resultType')" />
         <p class="input-hint">{{ t(form.api_result_type === 'auth_file' ? 'admin.accounts.authProfiles.fileHint' : 'admin.accounts.authProfiles.codeHint') }}</p>
+        <label for="auth-profile-custom-input" class="input-label">{{ t('admin.accounts.authProfiles.customInput') }}</label>
+        <textarea id="auth-profile-custom-input" v-model="form.custom_input" class="input min-h-24 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="t('admin.accounts.authProfiles.customInputHint')" />
+        <p class="input-hint">{{ t('admin.accounts.authProfiles.customInputDescription') }}</p>
         <label for="auth-profile-script" class="input-label">{{ t('admin.accounts.authProfiles.script') }}</label>
         <textarea id="auth-profile-script" v-model="form.code_script" class="input min-h-48 font-mono text-sm" spellcheck="false" maxlength="16384" :placeholder="scriptExample" />
         <p class="input-hint">{{ t(form.has_code_script ? 'admin.accounts.authProfiles.scriptKeep' : 'admin.accounts.authProfiles.scriptHint') }}</p>
@@ -27,7 +30,7 @@
         <button type="button" class="btn btn-secondary" :disabled="testing" @click="testScript">{{ t('admin.accounts.authProfiles.testCode') }}</button>
         <p v-if="testResult" role="status" class="text-sm text-green-600">{{ t('admin.accounts.authProfiles.testSuccess') }}</p>
       </div>
-      <div>
+      <div v-if="form.mailbox_mode !== 'api'">
         <div v-if="show && form.id && form.has_secret" class="mb-3 rounded-lg bg-gray-50 p-3 dark:bg-dark-700">
           <p class="mb-1 text-xs text-gray-500 dark:text-dark-400">{{ t('admin.accounts.authProfiles.currentSecret') }}</p>
           <ReauthProfileSecret :profile-id="form.id" :has-secret="form.has_secret" />
@@ -74,7 +77,7 @@ const resultTypeOptions = computed(() => [
   { value: 'code', label: t('admin.accounts.authProfiles.codeResult') },
   { value: 'auth_file', label: t('admin.accounts.authProfiles.fileResult') }
 ])
-const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbox_mode: 'imap', api_result_type: 'code', mailbox_address: '', imap_host: '', imap_port: 993, imap_username: '', api_url: '', code_script: '', has_code_script: false, folder: 'INBOX', sender_filter: '', mailbox_wait_seconds: 60, email_resend_seconds: 30, code_pattern: '(\\d{6})', proxy_id: null, proxy_ids: [], secret: '', has_secret: false })
+const defaults = (): ReauthProfile => ({ id: '', name: '', enabled: true, mailbox_mode: 'imap', api_result_type: 'code', mailbox_address: '', imap_host: '', imap_port: 993, imap_username: '', api_url: '', code_script: '', custom_input: '', has_code_script: false, folder: 'INBOX', sender_filter: '', code_pattern: '(\\d{6})', mailbox_wait_seconds: 60, email_resend_seconds: 30, proxy_id: null, proxy_ids: [], secret: '', has_secret: false })
 const form = ref(defaults())
 const proxies = ref<Proxy[]>([])
 const saving = ref(false)
@@ -82,7 +85,8 @@ const showSecret = ref(false)
 const error = ref(''), errorCode = ref(''), errorRetryable = ref(false)
 const testEmail = ref(''), testResult = ref(''), testing = ref(false)
 let testAbort: AbortController | null = null
-const scriptExample = computed(() => `// context: loginEmail, since, mailboxAddress, secret
+const scriptExample = computed(() => `// context: loginEmail, since
+// input.param is your custom value (JSON object/string/number)
 // Set your endpoint and request options in this code.
 // Filter messages by recipient and date in your request.
 const response = await fetch('https://your-mail-service.example/messages', {
@@ -107,7 +111,7 @@ watch(() => props.show, async show => {
   showSecret.value = false
   testAbort?.abort(); testResult.value = ''; testEmail.value = ''
   if (!show) { form.value.secret = ''; form.value.code_script = ''; return }
-  form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: props.profile.mailbox_wait_seconds || 60, email_resend_seconds: props.profile.email_resend_seconds || 30, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '' } : defaults()
+  form.value = props.profile ? { ...props.profile, proxy_ids: [...(props.profile.proxy_ids || (props.profile.proxy_id ? [props.profile.proxy_id] : []))], proxy_id: null, mailbox_wait_seconds: props.profile.mailbox_wait_seconds || 60, email_resend_seconds: props.profile.email_resend_seconds || 30, api_result_type: props.profile.api_result_type || 'code', secret: '', code_script: '', custom_input: props.profile.custom_input || '' } : defaults()
   error.value = ''; errorCode.value = ''
   try { proxies.value = await getAll() } catch (e: any) { error.value = e?.message || t('admin.accounts.authProfiles.failed') }
 })

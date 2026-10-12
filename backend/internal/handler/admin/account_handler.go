@@ -1708,6 +1708,21 @@ func (h *AccountHandler) applyOAuthCredentials(ctx context.Context, accountID in
 		if resumed != nil {
 			updatedAccount = resumed
 		}
+		// Successful manual, file-based or automatic authorization starts a new
+		// recovery cycle. The automatic-attempt marker never blocks manual auth.
+		if existing.GetExtraString("one_click_auth_auto_attempt") != "" {
+			if err := h.adminService.UpdateAccountExtra(ctx, accountID, map[string]any{
+				"one_click_auth_auto_attempt": "",
+			}); err != nil {
+				return nil, fmt.Errorf("clear automatic authorization attempt: %w", err)
+			}
+			extra := make(map[string]any, len(updatedAccount.Extra)+1)
+			for key, value := range updatedAccount.Extra {
+				extra[key] = value
+			}
+			extra["one_click_auth_auto_attempt"] = ""
+			updatedAccount.Extra = extra
+		}
 	}
 
 	if h.tokenCacheInvalidator != nil && updatedAccount.IsOAuth() {

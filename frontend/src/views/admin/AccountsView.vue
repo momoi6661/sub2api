@@ -539,9 +539,7 @@
       <p v-if="bindingError" role="alert" class="mt-3 text-red-600">{{ bindingError }}</p>
       <template #footer><button class="btn btn-secondary" :disabled="authBindingBusy" @click="showAuthBinding = false">{{ t('common.cancel') }}</button><button class="btn btn-primary" :disabled="authBindingBusy || !bindingProfileID" @click="bindAuthProfile">{{ t('common.save') }}</button></template>
     </BaseDialog>
-    <BaseDialog :show="!!oneClickAccount" :title="t('admin.accounts.oneClickAuth.title')" @close="oneClickAccount = null">
-      <OneClickAuthForm v-if="oneClickAccount" :key="oneClickAccount.id" :account-i-d="oneClickAccount.id" :initial-profile-i-d="String(oneClickAccount.extra?.one_click_auth_profile_id || '')" :initial-login-email="String(oneClickAccount.extra?.one_click_auth_login_email || oneClickAccount.credentials?.email || '')" :initial-custom-input="String(oneClickAccount.extra?.one_click_auth_custom_input ?? '')" :initial-workspace-index="Number(oneClickAccount.extra?.one_click_auth_workspace_index ?? 1)" @submitted="oneClickSubmitted" />
-    </BaseDialog>
+
     <TotpStepUpDialog :controller="accountExportStepUp" />
   </AppLayout>
 </template>
@@ -550,13 +548,11 @@
 import { ref, reactive, computed, onMounted, onUnmounted, toRaw, watch, nextTick } from 'vue'
 import { useIntervalFn, useSessionStorage } from '@vueuse/core'
 import BaseDialog from '@/components/common/BaseDialog.vue'
-import OneClickAuthForm from '@/components/account/OneClickAuthForm.vue'
 import ReauthProfileSelect from '@/components/account/ReauthProfileSelect.vue'
 import { useI18n } from 'vue-i18n'
-import { useRouter } from 'vue-router'
 import { useAppStore } from '@/stores/app'
 import { useAuthStore } from '@/stores/auth'
-import { listReauthProfiles, submitAuthorizationTasks, listAuthorizationTasks, type AuthorizationTask, type ReauthProfile } from '@/api/admin/reauthProfiles'
+import { listReauthProfiles, submitAuthorizationTasks, listAuthorizationTasks, getAuthorizationTask, type AuthorizationTask, type ReauthProfile } from '@/api/admin/reauthProfiles'
 import { adminAPI } from '@/api/admin'
 import { useTableLoader } from '@/composables/useTableLoader'
 import { useSwipeSelect, type SwipeSelectVirtualContext } from '@/composables/useSwipeSelect'
@@ -605,7 +601,6 @@ import { formatMultiplier } from '@/utils/formatters'
 import type { Account, AccountListItem, AccountPlatform, AccountSchedulerGroupScore, AccountType, AccountUsageInfo, Proxy as AccountProxy, AdminGroup, WindowStats, ClaudeModel, UpstreamBillingProbeSnapshot } from '@/types'
 
 const { t } = useI18n()
-const router = useRouter()
 const appStore = useAppStore()
 const authStore = useAuthStore()
 
@@ -1503,7 +1498,6 @@ const isAnyModalOpen = computed(() => {
     showTempUnsched.value ||
     showDeleteDialog.value ||
     showReAuth.value ||
-    !!oneClickAccount.value ||
     showTest.value ||
     showStats.value ||
     showSchedulePanel.value ||
@@ -2515,7 +2509,7 @@ const handleSchedule = async (a: Account) => {
 }
 const closeSchedulePanel = () => { showSchedulePanel.value = false; scheduleAcc.value = null; scheduleModelOptions.value = [] }
 const authOpening = reactive(new Set<number>())
-const oneClickAccount = ref<Account | null>(null)
+const submittedAuthTasks = new Map<number, AuthorizationTask>()
 let authActivityTimer: ReturnType<typeof setTimeout> | undefined
 let authActivityRequest: AbortController | undefined
 let authTasksDisposed = false
@@ -2529,11 +2523,27 @@ async function loadAuthActivity() {
     const result = await listAuthorizationTasks({ status: 'active', page_size: 100 }, controller.signal)
     if (controller.signal.aborted || authTasksDisposed) return
     const active = new Set(result.items.map(task => task.account_id).filter(id => id > 0))
+    const activeTaskIDs = new Set(result.items.map(task => task.id))
+    for (const [id] of submittedAuthTasks) {
+      if (activeTaskIDs.has(id)) continue
+      const task = await getAuthorizationTask(id, controller.signal)
+      if (controller.signal.aborted || authTasksDisposed) return
+      if (task.status === 'queued' || task.status === 'running') continue
+      submittedAuthTasks.delete(id)
+      const message = `${task.account_name} · ${t('admin.accounts.authorizationTasks.statuses.' + task.status)}`
+      if (task.status === 'succeeded' || task.status === 'ready') appStore.showSuccess(message)
+      else appStore.showError(`${message}${task.error_code ? ' · ' + task.error_code : ''}`)
+    }
+    submittedAuthTasks.forEach(task => active.add(task.account_id))
     const finished = [...authOpening].some(id => !active.has(id))
     authOpening.clear(); active.forEach(id => authOpening.add(id))
     if (finished) reload()
-    if (result.active_count) authActivityTimer = setTimeout(() => { void loadAuthActivity() }, 5000)
-  } catch { /* Task details remain accessible from the sidebar. */ }
+    if (result.active_count || submittedAuthTasks.size) authActivityTimer = setTimeout(() => { void loadAuthActivity() }, 5000)
+  } catch {
+    if (!controller.signal.aborted && !authTasksDisposed && !document.hidden && submittedAuthTasks.size) {
+      authActivityTimer = setTimeout(() => { void loadAuthActivity() }, 5000)
+    }
+  }
 }
 function authActivityVisibility() {
   if (document.hidden) { clearTimeout(authActivityTimer); authActivityRequest?.abort() }
@@ -2543,25 +2553,23 @@ async function handleOneClickAuth(a: AccountListItem) {
   if (authOpening.has(a.id)) return
   authOpening.add(a.id)
   try {
-    oneClickAccount.value = await adminAPI.accounts.getById(a.id)
+    const tasks = await submitAuthorizationTasks([a.id])
+    tasks.forEach(task => submittedAuthTasks.set(task.id, task))
+    appStore.showSuccess(t('admin.accounts.authorizationTasks.submitted'))
+    void loadAuthActivity()
   } catch (e: any) {
     appStore.showError(e?.message || t('admin.accounts.authProfiles.failed'))
   }
-  finally { authOpening.delete(a.id) }
-}
-function oneClickSubmitted(task: AuthorizationTask) {
-  oneClickAccount.value = null
-  authOpening.add(task.account_id)
-  appStore.showSuccess(t('admin.accounts.authorizationTasks.submitted'))
-  void router.push({ path: '/admin/authorization-tasks', query: { task: String(task.id) } })
+  finally { if (![...submittedAuthTasks.values()].some(task => task.account_id === a.id)) authOpening.delete(a.id) }
 }
 const batchAuthBusy = ref(false)
 async function batchOneClickAuth() {
   if (batchAuthBusy.value) return
   batchAuthBusy.value = true
   try {
-    // Submit the entire batch before leaving; execution is serialized on the server.
-    await submitAuthorizationTasks([...selIds.value])
+    // Submit the entire batch and keep the account page open.
+    const tasks = await submitAuthorizationTasks([...selIds.value])
+    tasks.forEach(task => submittedAuthTasks.set(task.id, task))
     appStore.showSuccess(t('admin.accounts.authorizationTasks.submitted'))
     void loadAuthActivity()
   } catch (e: any) { appStore.showError(e?.message || t('admin.accounts.authProfiles.failed')) }

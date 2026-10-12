@@ -49,6 +49,17 @@
         </div>
       </div>
 
+      <div v-if="allOpenAIOAuth" class="border-t border-gray-200 pt-4 dark:border-dark-600">
+        <label class="input-label flex items-center gap-2">
+          <input id="bulk-edit-auto-auth-apply" v-model="applyAutomaticAuth" type="checkbox" />
+          {{ t('admin.accounts.authProfiles.auto') }}
+        </label>
+        <div v-if="applyAutomaticAuth" class="mt-2 space-y-2">
+          <label class="flex items-center gap-2 text-sm"><input id="bulk-edit-auto-auth-enabled" v-model="automaticAuthEnabled" type="checkbox" />{{ t('common.enabled') }}</label>
+          <p class="input-hint">{{ t('admin.accounts.oneClickAuth.desc') }}</p>
+        </div>
+      </div>
+
       <!-- OpenAI passthrough -->
       <div
         v-if="allOpenAIPassthroughCapable"
@@ -1562,6 +1573,8 @@ const emit = defineEmits<{
 const { t } = useI18n()
 const appStore = useAppStore()
 const enableOneClickAuth = ref(false)
+const applyAutomaticAuth = ref(false)
+const automaticAuthEnabled = ref(false)
 const authProfiles = ref<ReauthProfile[]>([])
 const authProfilesLoading = ref(false)
 const oneClickAuthProfile = ref('')
@@ -1980,6 +1993,10 @@ const buildUpdatePayload = (): Record<string, unknown> | null => {
     extra.one_click_auth_workspace_index = Math.max(0, Math.floor(oneClickAuthWorkspaceIndex.value === '' ? 1 : oneClickAuthWorkspaceIndex.value ?? 1))
   }
 
+  if (applyAutomaticAuth.value && allOpenAIOAuth.value) {
+    ensureExtra().one_click_auth_enabled = automaticAuthEnabled.value
+  }
+
   if (enableProxy.value) {
     // 后端期望 proxy_id: 0 表示清除代理，而不是 null
     updates.proxy_id = proxyId.value === null ? 0 : proxyId.value
@@ -2244,6 +2261,8 @@ const handleSubmit = async () => {
   }
 
   const hasAnyFieldEnabled =
+    (enableOneClickAuth.value && allOpenAIOAuth.value) ||
+    (applyAutomaticAuth.value && allOpenAIOAuth.value) ||
     enableBaseUrl.value ||
     enableOpenAIPassthrough.value ||
     enableOpenAIFlattenNamespaces.value ||
@@ -2395,6 +2414,9 @@ watch(
   (newShow) => {
     if (!newShow) {
       // Reset all enable flags
+      enableOneClickAuth.value = false
+      applyAutomaticAuth.value = false
+      automaticAuthEnabled.value = false
       enableBaseUrl.value = false
       enableModelRestriction.value = false
       enableCustomErrorCodes.value = false

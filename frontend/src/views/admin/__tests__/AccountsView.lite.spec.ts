@@ -4,6 +4,7 @@ import { defineComponent } from 'vue'
 
 import AccountsView from '../AccountsView.vue'
 import AccountActionMenu from '@/components/admin/account/AccountActionMenu.vue'
+import { submitAuthorizationTasks, getAuthorizationTask } from '@/api/admin/reauthProfiles'
 
 const {
   listAccounts,
@@ -65,6 +66,8 @@ vi.mock('@/stores/auth', () => ({
 vi.mock('@/api/admin/reauthProfiles', async () => ({
   ...await vi.importActual<typeof import('@/api/admin/reauthProfiles')>('@/api/admin/reauthProfiles'),
   listAuthorizationTasks: vi.fn().mockResolvedValue({ items: [], active_count: 0 }),
+  submitAuthorizationTasks: vi.fn(),
+  getAuthorizationTask: vi.fn(),
 }))
 
 vi.mock('vue-router', () => ({ useRouter: () => ({ push: vi.fn() }) }))
@@ -173,6 +176,21 @@ const fullAccount = {
 }
 
 describe('admin AccountsView lite account list', () => {
+  it('submits authorization directly without opening a dialog or fetching account details', async () => {
+    listAccounts.mockResolvedValue({ items: [{ ...listRow, extra: { one_click_auth_profile_id: 'profile' } }], total: 1, page: 1, page_size: 20, pages: 1 })
+    vi.mocked(submitAuthorizationTasks).mockResolvedValue([{ id: 99, account_id: 42, status: 'queued' } as any])
+    vi.mocked(getAuthorizationTask).mockResolvedValue({ id: 99, account_id: 42, account_name: 'account', status: 'failed', error_code: 'MAILBOX_TIMEOUT' } as any)
+    const wrapper = mountView()
+    await flushPromises()
+    getById.mockClear()
+    await wrapper.get('[data-testid="one-click-auth-button"]').trigger('click')
+    await flushPromises()
+    expect(submitAuthorizationTasks).toHaveBeenCalledWith([42])
+    expect(getById).not.toHaveBeenCalled()
+    expect(wrapper.findComponent({ name: 'OneClickAuthForm' }).exists()).toBe(false)
+    expect(showError).toHaveBeenCalledWith(expect.stringContaining('MAILBOX_TIMEOUT'))
+    wrapper.unmount()
+  })
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()

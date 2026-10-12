@@ -81,6 +81,17 @@ function mountModal(extraProps: Record<string, unknown> = {}) {
 }
 
 describe('BulkEditAccountModal', () => {
+  it.each([true, false])('批量自动授权只修改开关，保留原有绑定和一次尝试标记 (%s)', async (enabled) => {
+    const wrapper = mountModal({ selectedPlatforms: ['openai'], selectedTypes: ['oauth'] })
+    await wrapper.get('#bulk-edit-auto-auth-apply').setValue(true)
+    await wrapper.get('#bulk-edit-auto-auth-enabled').setValue(enabled)
+    await wrapper.get('#bulk-edit-account-form').trigger('submit.prevent')
+    await flushPromises()
+    expect(adminAPI.accounts.bulkUpdate).toHaveBeenCalledWith([1, 2], {
+      extra: { one_click_auth_enabled: enabled }
+    })
+    wrapper.unmount()
+  })
   beforeEach(() => {
     vi.mocked(adminAPI.accounts.bulkUpdate).mockReset()
     vi.mocked(adminAPI.accounts.checkMixedChannelRisk).mockReset()

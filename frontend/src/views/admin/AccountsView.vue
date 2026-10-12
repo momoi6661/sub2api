@@ -268,7 +268,7 @@
                 :account-id="row.id"
                 :enabled="subscriptionRefreshEnabled"
                 :refresh-key="subscriptionRefreshToken"
-                :subscription="subscriptionSnapshots[String(row.id)] ?? null"
+                :subscription="persistedAccountSubscription(row)"
                 @subscription-loaded="saveAccountSubscription(row.id, $event)"
               />
             </div>
@@ -784,6 +784,23 @@ const subscriptionSnapshots = useSessionStorage<Record<string, AccountSubscripti
 )
 const saveAccountSubscription = (id: number, result: AccountSubscriptionInfo) => {
   subscriptionSnapshots.value = { ...subscriptionSnapshots.value, [String(id)]: result }
+}
+const persistedAccountSubscription = (row: AccountListItem): AccountSubscriptionInfo | null => {
+  const expiresAt = typeof row.extra?.openai_subscription_expires_at === 'string'
+    ? row.extra.openai_subscription_expires_at
+    : ''
+  const checkedAt = typeof row.extra?.openai_subscription_checked_at === 'string'
+    ? row.extra.openai_subscription_checked_at
+    : ''
+  const persisted = expiresAt || checkedAt ? { subscription_expires_at: expiresAt, checked_at: checkedAt } : null
+  const session = subscriptionSnapshots.value[String(row.id)]
+  if (!session) return persisted
+  if (!persisted) return session
+  const sessionChecked = Date.parse(session.checked_at || '')
+  const persistedChecked = Date.parse(persisted.checked_at || '')
+  return Number.isFinite(sessionChecked) && (!Number.isFinite(persistedChecked) || sessionChecked >= persistedChecked)
+    ? session
+    : persisted
 }
 const refreshingAccountIDs = reactive(new Set<number>())
 const manualRefreshing = ref(false)

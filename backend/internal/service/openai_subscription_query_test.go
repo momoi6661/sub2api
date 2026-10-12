@@ -18,6 +18,16 @@ type subscriptionQueryProxyRepo struct {
 	proxy *Proxy
 }
 
+type subscriptionSnapshotRepo struct {
+	AccountRepository
+	updates []map[string]any
+}
+
+func (r *subscriptionSnapshotRepo) UpdateExtra(_ context.Context, _ int64, updates map[string]any) error {
+	r.updates = append(r.updates, updates)
+	return nil
+}
+
 func (r subscriptionQueryProxyRepo) GetByID(context.Context, int64) (*Proxy, error) {
 	return r.proxy, nil
 }
@@ -33,8 +43,10 @@ func TestQueryAccountSubscriptionFetchesSavedIdentityAndCaches(t *testing.T) {
 	})
 	defer server.Close()
 	proxyID := int64(3)
+	snapshotRepo := &subscriptionSnapshotRepo{}
 	svc := &OpenAIOAuthService{
-		proxyRepo: subscriptionQueryProxyRepo{proxy: &Proxy{ID: 3, Status: StatusActive, Protocol: "http", Host: "proxy.test", Port: 7890}},
+		accountRepo: snapshotRepo,
+		proxyRepo:   subscriptionQueryProxyRepo{proxy: &Proxy{ID: 3, Status: StatusActive, Protocol: "http", Host: "proxy.test", Port: 7890}},
 		privacyClientFactory: func(proxyURL string) (*req.Client, error) {
 			require.Equal(t, "http://proxy.test:7890", proxyURL)
 			return req.C().SetTimeout(time.Second), nil
@@ -75,6 +87,10 @@ func TestQueryAccountSubscriptionFetchesSavedIdentityAndCaches(t *testing.T) {
 	require.NoError(t, err)
 	require.EqualValues(t, 4, calls.Load(), "explicit refresh must bypass a still valid cache")
 	require.Equal(t, "2000-01-01T00:00:00Z", account.GetCredential("subscription_expires_at"), "query must not rewrite saved credentials")
+	require.Len(t, snapshotRepo.updates, 4)
+	require.Equal(t, "2027-01-01T00:00:00Z", snapshotRepo.updates[len(snapshotRepo.updates)-1][OpenAISubscriptionExpiryExtraKey])
+	require.NotEmpty(t, snapshotRepo.updates[len(snapshotRepo.updates)-1][OpenAISubscriptionCheckedAtExtraKey])
+	require.Equal(t, "2027-01-01T00:00:00Z", account.GetExtraString(OpenAISubscriptionExpiryExtraKey))
 }
 
 func TestQueryAccountSubscriptionOnlyUsesMatchingEntitlement(t *testing.T) {

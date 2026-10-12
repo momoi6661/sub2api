@@ -21,6 +21,11 @@ type OpenAIAccountSubscription struct {
 	CheckedAt             string `json:"checked_at"`
 }
 
+const (
+	OpenAISubscriptionExpiryExtraKey    = "openai_subscription_expires_at"
+	OpenAISubscriptionCheckedAtExtraKey = "openai_subscription_checked_at"
+)
+
 type openAISubscriptionCacheEntry struct {
 	result OpenAIAccountSubscription
 	until  time.Time
@@ -123,6 +128,23 @@ func (s *OpenAIOAuthService) QueryAccountSubscription(ctx context.Context, accou
 			return nil, subscriptionErr
 		}
 		result := OpenAIAccountSubscription{SubscriptionExpiresAt: expiresAt, CheckedAt: time.Now().UTC().Format(time.RFC3339)}
+		// Persist only the queried metadata in extra. Never write subscription
+		// data back into credentials, which contain the OAuth authorization state.
+		updates := map[string]any{OpenAISubscriptionCheckedAtExtraKey: result.CheckedAt}
+		if expiresAt != "" {
+			updates[OpenAISubscriptionExpiryExtraKey] = expiresAt
+		}
+		if s.accountRepo != nil {
+			if err := s.accountRepo.UpdateExtra(queryCtx, account.ID, updates); err != nil {
+				slog.Warn("openai_subscription_snapshot_persist_failed", "account_id", account.ID, "err", err)
+			}
+		}
+		if account.Extra == nil {
+			account.Extra = make(map[string]any)
+		}
+		for key, value := range updates {
+			account.Extra[key] = value
+		}
 		ttl := 5 * time.Minute
 		if expiresAt == "" {
 			ttl = time.Minute

@@ -16,6 +16,7 @@ import (
 // OpenAIOAuthService handles OpenAI OAuth authentication flows
 type OpenAIOAuthService struct {
 	sessionStore         *openai.SessionStore
+	accountRepo          AccountRepository
 	proxyRepo            ProxyRepository
 	oauthClient          OpenAIOAuthClient
 	privacyClientFactory PrivacyClientFactory // 用于调用 chatgpt.com/backend-api（ImpersonateChrome）
@@ -36,6 +37,13 @@ func NewOpenAIOAuthService(proxyRepo ProxyRepository, oauthClient OpenAIOAuthCli
 // 用于调用 chatgpt.com/backend-api 获取账号信息（plan_type 等）。
 func (s *OpenAIOAuthService) SetPrivacyClientFactory(factory PrivacyClientFactory) {
 	s.privacyClientFactory = factory
+}
+
+// SetAccountRepository injects the account store used for read-only metadata
+// snapshots such as the OpenAI subscription expiry. OAuth credentials remain
+// separate and are never changed by these snapshots.
+func (s *OpenAIOAuthService) SetAccountRepository(repo AccountRepository) {
+	s.accountRepo = repo
 }
 
 // OpenAIAuthURLResult contains the authorization URL and session info

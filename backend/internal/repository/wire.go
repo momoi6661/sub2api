@@ -70,8 +70,8 @@ var ProviderSet = wire.NewSet(
 	NewGroupRepository,
 	NewAdminGroupRepository,
 	NewCompositeModelRouteRepository,
-	NewAccountRepository,
-	NewAdminAccountRepository,
+	ProvideAccountRepository,
+	ProvideAdminAccountRepository,
 	NewScheduledTestPlanRepository,   // 定时测试计划仓储
 	NewScheduledTestResultRepository, // 定时测试结果仓储
 	NewProxyRepository,
@@ -231,4 +231,16 @@ func ProvideSQLDB(client *ent.Client) (*sql.DB, error) {
 // 提供：*redis.Client
 func ProvideRedis(cfg *config.Config) *redis.Client {
 	return InitRedis(cfg)
+}
+
+func ProvideAccountRepository(client *ent.Client, db *sql.DB, cache service.SchedulerCache, events *service.AccountErrorEvents) service.AccountRepository {
+	repo := newAccountRepositoryWithSQL(client, db, cache)
+	repo.accountErrorEvents = events
+	return repo
+}
+
+func ProvideAdminAccountRepository(client *ent.Client, db *sql.DB, cache service.SchedulerCache, events *service.AccountErrorEvents) service.AdminAccountRepository {
+	repo := newAccountRepositoryWithSQL(client, db, cache)
+	repo.accountErrorEvents = events
+	return repo
 }

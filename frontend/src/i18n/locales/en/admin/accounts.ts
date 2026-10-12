@@ -538,7 +538,7 @@ export default {
         currentSecret: 'Saved password / API key',
         showSecret: 'Show password / key',
         hideSecret: 'Hide password / key',
-        autoHint: "Off by default. Checks authentication failures every minute and attempts each failed credential state once. No infinite retries on errors or timeouts. Retry manually from the account list.",
+        autoHint: "Off by default. Triggered when requests or token refresh mark authorization invalid; attempts each failed credential state once. No infinite retries on errors or timeouts. Retry manually from the account list.",
         lastAutomatic: "Last automatic authorization",
         batchAuthorize: 'Batch one-click authorization',
         profile: 'Authorization profile',

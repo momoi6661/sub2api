@@ -24,7 +24,7 @@ import (
 
 var oneClickAccountLocks sync.Map
 
-func (h *AccountHandler) SetReauthSettings(settings *SettingHandler, locks service.LeaderLockCache) {
+func (h *AccountHandler) SetReauthSettings(settings *SettingHandler, locks service.LeaderLockCache, events *service.AccountErrorEvents) {
 	if settings != nil {
 		h.reauthSettings = settings.settingService
 		h.reauthLocks = locks
@@ -33,6 +33,9 @@ func (h *AccountHandler) SetReauthSettings(settings *SettingHandler, locks servi
 			return err
 		})
 		h.reauthWorker.Start()
+		if events != nil {
+			events.SetHandler(h.reauthWorker.Notify)
+		}
 		h.wakeAuthorizationTasks()
 	}
 }

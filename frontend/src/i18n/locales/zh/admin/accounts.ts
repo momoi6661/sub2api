@@ -332,7 +332,7 @@ export default {
         currentSecret: '当前保存的密码 / API 密钥',
         showSecret: '显示密码 / 密钥',
         hideSecret: '隐藏密码 / 密钥',
-        autoHint: "默认关闭。开启后每分钟检查授权失效，每次失效记录自动执行一次；错误或超时不会无限重试，可在账号列表手动重试。",
+        autoHint: "默认关闭。开启后由请求或令牌刷新中的授权失效标记触发，每次失效记录自动执行一次；错误或超时不会无限重试，可在账号列表手动重试。",
         lastAutomatic: "最近自动授权",
         batchAuthorize: '批量一键授权',
         profile: '授权配置',

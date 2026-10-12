@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -18,16 +17,19 @@ import (
 // OneClickAuthWorker performs one attempt per invalid credential state. The
 // marker is persisted before execution, so restarts cannot create retry loops.
 type OneClickAuthWorker struct {
-	admin  AdminService
-	locks  LeaderLockCache
-	run    func(context.Context, int64) error
-	cancel context.CancelFunc
-	done   chan struct{}
-	once   sync.Once
+	admin   AdminService
+	locks   LeaderLockCache
+	run     func(context.Context, int64) error
+	cancel  context.CancelFunc
+	done    chan struct{}
+	once    sync.Once
+	mu      sync.Mutex
+	pending map[int64]struct{}
+	wake    chan struct{}
 }
 
 func NewOneClickAuthWorker(admin AdminService, locks LeaderLockCache, run func(context.Context, int64) error) *OneClickAuthWorker {
-	return &OneClickAuthWorker{admin: admin, locks: locks, run: run, done: make(chan struct{})}
+	return &OneClickAuthWorker{admin: admin, locks: locks, run: run, done: make(chan struct{}), pending: make(map[int64]struct{}), wake: make(chan struct{}, 1)}
 }
 
 func (w *OneClickAuthWorker) Start() {
@@ -35,14 +37,31 @@ func (w *OneClickAuthWorker) Start() {
 	w.cancel = cancel
 	go func() {
 		defer close(w.done)
-		ticker := time.NewTicker(time.Minute)
-		defer ticker.Stop()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case <-ticker.C:
-				w.scan(ctx)
+			case <-w.wake:
+				for ctx.Err() == nil {
+					w.mu.Lock()
+					var id int64
+					for candidate := range w.pending {
+						id = candidate
+						delete(w.pending, candidate)
+						break
+					}
+					w.mu.Unlock()
+					if id == 0 {
+						break
+					}
+					if w.admin == nil || w.run == nil {
+						continue
+					}
+					account, err := w.admin.GetAccount(ctx, id)
+					if err == nil {
+						w.attempt(ctx, account)
+					}
+				}
 			}
 		}
 	}()
@@ -65,7 +84,11 @@ func IsOneClickAuthFailure(a *Account) bool {
 	if !enabled {
 		return false
 	}
-	message := strings.ToLower(a.ErrorMessage)
+	return isOneClickAuthFailureMessage(a.ErrorMessage)
+}
+
+func isOneClickAuthFailureMessage(message string) bool {
+	message = strings.ToLower(message)
 	for _, marker := range []string{"invalid_grant", "token_expired", "token_revoked", "token_invalidated", "invalid_token", "invalid_refresh_token", "refresh_token_reused", "authentication_error", "unauthorized", "401", "token refresh failed (non-retryable)"} {
 		if strings.Contains(message, marker) {
 			return true
@@ -80,33 +103,18 @@ func OneClickAuthFailureFingerprint(a *Account) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (w *OneClickAuthWorker) scan(ctx context.Context) {
-	if w.admin == nil || w.run == nil {
+// Notify queues an account already marked unavailable by the existing request
+// or token-refresh path. It never queries the upstream or blocks that request.
+func (w *OneClickAuthWorker) Notify(id int64) {
+	if id <= 0 {
 		return
 	}
-	// Collect candidates before execution: successful authorization removes rows
-	// from the error filter and would otherwise shift later pagination offsets.
-	var candidates []Account
-	for page := 1; ctx.Err() == nil; page++ {
-		accounts, total, err := w.admin.ListAccounts(ctx, page, 100, PlatformOpenAI, "oauth", StatusError, "", 0, "", "id", "asc")
-		if err != nil {
-			slog.Warn("one_click_auth.scan_failed")
-			return
-		}
-		for _, account := range accounts {
-			if IsOneClickAuthFailure(&account) {
-				candidates = append(candidates, account)
-			}
-		}
-		if len(accounts) == 0 || int64(page*100) >= total {
-			break
-		}
-	}
-	for i := range candidates {
-		if ctx.Err() != nil {
-			return
-		}
-		w.attempt(ctx, &candidates[i])
+	w.mu.Lock()
+	w.pending[id] = struct{}{}
+	w.mu.Unlock()
+	select {
+	case w.wake <- struct{}{}:
+	default:
 	}
 }
 
@@ -120,7 +128,7 @@ func (w *OneClickAuthWorker) attempt(ctx context.Context, account *Account) {
 	}
 	key := fmt.Sprintf("one_click_auth_auto:%d", account.ID)
 	owner := fmt.Sprintf("%d", time.Now().UnixNano())
-	ok, err := w.locks.TryAcquireLeaderLock(ctx, key, owner, 150*time.Second)
+	ok, err := w.locks.TryAcquireLeaderLock(ctx, key, owner, 11*time.Minute)
 	if err != nil || !ok {
 		return
 	}

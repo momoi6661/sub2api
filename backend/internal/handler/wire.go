@@ -54,6 +54,7 @@ func ProvideAdminHandlers(
 	opencodeGoUsage *service.OpenCodeGoUsageService,
 	claudeResetCredits *service.ClaudeResetCreditService,
 	reauthLocks service.LeaderLockCache,
+	accountErrorEvents *service.AccountErrorEvents,
 	db *sql.DB,
 ) *AdminHandlers {
 	accountHandler.SetUpstreamBillingProbeService(upstreamBillingProbe)
@@ -61,7 +62,7 @@ func ProvideAdminHandlers(
 	accountHandler.SetOpenCodeGoUsageService(opencodeGoUsage)
 	accountHandler.SetClaudeResetCreditService(claudeResetCredits)
 	accountHandler.SetAuthorizationTasks(repository.NewAuthorizationTaskRepository(db))
-	accountHandler.SetReauthSettings(settingHandler, reauthLocks)
+	accountHandler.SetReauthSettings(settingHandler, reauthLocks, accountErrorEvents)
 	return &AdminHandlers{
 		Dashboard:              dashboardHandler,
 		User:                   userHandler,

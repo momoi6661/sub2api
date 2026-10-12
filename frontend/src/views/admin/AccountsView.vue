@@ -783,7 +783,12 @@ const subscriptionSnapshots = useSessionStorage<Record<string, AccountSubscripti
   `account-subscription-results:${authStore.user?.id ?? 'admin'}`, {}
 )
 const saveAccountSubscription = (id: number, result: AccountSubscriptionInfo) => {
-  subscriptionSnapshots.value = { ...subscriptionSnapshots.value, [String(id)]: result }
+  const key = String(id)
+  const previous = subscriptionSnapshots.value[key]
+  const merged = result.subscription_expires_at || !previous?.subscription_expires_at
+    ? result
+    : { ...result, subscription_expires_at: previous.subscription_expires_at }
+  subscriptionSnapshots.value = { ...subscriptionSnapshots.value, [key]: merged }
 }
 const persistedAccountSubscription = (row: AccountListItem): AccountSubscriptionInfo | null => {
   const expiresAt = typeof row.extra?.openai_subscription_expires_at === 'string'
@@ -1630,6 +1635,17 @@ const handleManualRefresh = async () => {
     }
     await Promise.all([load(), loadUpstreamBillingProbeGlobalState()])
     if (subscriptionRefreshEnabled.value) {
+      // Virtualized rows outside the viewport have no mounted subscription
+      // component. Query those rows explicitly so a manual refresh has one
+      // consistent scope: every account on the current page.
+      const mountedSubscriptionIDs = new Set(subscriptionRefs.keys())
+      await Promise.allSettled(accounts.value
+        .filter(account => account.platform === 'openai' && account.type === 'oauth')
+        .filter(account => !mountedSubscriptionIDs.has(account.id))
+        .map(async account => {
+          const result = await adminAPI.accounts.getSubscription(account.id, true)
+          saveAccountSubscription(account.id, result)
+        }))
       await nextTick()
       subscriptionRefreshToken.value += 1
     }
@@ -2631,7 +2647,7 @@ const handleRefreshAccount = async (account: Account) => {
       subscriptionRefs.has(id)
         ? subscriptionRefs.get(id)!.refresh()
         : account.platform === 'openai' && account.type === 'oauth'
-          ? adminAPI.accounts.getSubscription(id, true)
+          ? adminAPI.accounts.getSubscription(id, true).then(result => saveAccountSubscription(id, result))
           : Promise.resolve(),
       adminAPI.accounts.getBatchTodayStats([id]).then(result => {
         todayStatsByAccountId.value = {

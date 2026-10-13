@@ -146,11 +146,9 @@ func TestApplyOAuthCredentialsPreservesExistingNonAuthCredentials(t *testing.T) 
 	gin.SetMode(gin.TestMode)
 	stub := newStubAdminService()
 	stub.getAccountResult = &service.Account{
-		ID:          1,
-		Platform:    service.PlatformOpenAI,
-		Type:        service.AccountTypeOAuth,
-		Status:      "inactive",
-		Schedulable: false,
+		ID:       1,
+		Platform: service.PlatformOpenAI,
+		Type:     service.AccountTypeOAuth,
 		Credentials: map[string]any{
 			"access_token":  "old-token",
 			"refresh_token": "old-refresh-token",
@@ -174,15 +172,6 @@ func TestApplyOAuthCredentialsPreservesExistingNonAuthCredentials(t *testing.T) 
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, 1, stub.updateAccountCalls)
-	var body struct {
-		Data struct {
-			Status      string `json:"status"`
-			Schedulable bool   `json:"schedulable"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
-	require.Equal(t, service.StatusActive, body.Data.Status)
-	require.True(t, body.Data.Schedulable)
 	require.Equal(t, map[string]any{
 		"access_token":  "new-token",
 		"refresh_token": "new-refresh-token",

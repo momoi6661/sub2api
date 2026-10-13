@@ -13,7 +13,10 @@ unsatisfied Sentinel/security challenges return `PROVIDER_SECURITY_CHALLENGE`,
 preserving the HTTP status when available. Phone verification, passkeys, MFA and
 additional provider verification return `MANUAL_REQUIRED`. New accounts use the account-level
 `workspace_index` (default 1) within the offered non-personal workspace list;
-when no team is available, the personal list is eligible instead. Out-of-range
+index 0 explicitly selects personal space. When no team is available, personal
+space is selected even if the saved team index is larger than 1. Personal-only
+consent forms are submitted using their own fields without inventing a workspace
+ID. Out-of-range team indexes
 indexes return `WORKSPACE_INDEX_OUT_OF_RANGE`. The selection is stored in account
 extra as `one_click_auth_workspace_index`, not in mailbox profiles.
 Issued tokens must match the selected workspace ID.
@@ -79,7 +82,6 @@ protocol authorization has a 600-second deadline. Errors and timeouts terminate
 the task. `retryable` informs the operator; it does not trigger automatic retries.
 
 For a native install, run `npm ci` and `npm start`. Node 24 is recommended.
-Run `npm test` for local protocol-flow tests; they do not contact the provider.
 
 Authorization profiles can hold a proxy pool. The backend chooses one proxy per
 account task and keeps it for protocol login, script fetch, and token exchange.
@@ -103,12 +105,19 @@ subject to the overall 600-second authorization deadline. The IMAP child has a
 seconds. Custom code scripts retain their 30-second deadline. Reading does not
 mark or delete messages.
 
-Automatic execution is off by default. The panel checks authentication failures
-once per minute and persists an attempt fingerprint before execution. Each failed
-credential state is attempted once, including across restarts. Errors do not
-create automatic retry loops. Changing the binding or toggling automatic execution
-resets the attempt marker; the visible account button always permits manual retry.
-Redis locks coordinate automatic and manual tasks across panel instances.
+Automatic execution is off by default. The original request or token-refresh
+path detects authentication failures and persists the account error; its notification
+then queues automatic authorization. There is no additional periodic account scan
+and no dependency on frontend auto-refresh. The panel persists an attempt fingerprint
+before execution, so each failed credential state is attempted once, including
+across restarts. Execution failures also consume this attempt; errors do not create
+automatic retry loops. Successful authorization clears an existing attempt marker;
+failed manual authorization preserves it. Manual authorization is not blocked by
+the persisted marker. Changing the account binding or toggling automatic execution
+in account editing also resets the marker; bulk toggling preserves it.
+Redis locks coordinate automatic and manual tasks across panel instances. An active
+task blocks another submission for that account; cancel the old task explicitly
+before retrying. Manual submission does not automatically cancel it.
 
 From `deploy/`, set a fixed `TOTP_ENCRYPTION_KEY` and a random `REAUTH_RUNNER_TOKEN`
 in the deployment .env, then add `-f docker-compose.reauth.yml` to the selected

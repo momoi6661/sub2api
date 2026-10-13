@@ -18,6 +18,19 @@ English | [中文](README_CN.md) | [日本語](README_JA.md)
 
 </div>
 
+## This fork: less mailbox work, centralized authorization
+
+This fork extends [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) while retaining its gateway and account-management features. It includes upstream **v0.2.16** (`4d9ac3e48`). See the [Chinese fork overview](README_CN.md#本分支少看邮箱集中管理授权) for the full feature guide.
+
+- Protocol-based authorization for existing OpenAI / Codex accounts: read matching IMAP verification mail, complete OAuth, and import the authorization file. No account registration is performed.
+- Configurable mailbox wait (60 seconds by default) and one resend (after 30 seconds by default).
+- JavaScript profiles for custom verification-code retrieval or direct authorization-file retrieval. The optional raw application input is exposed as `input`, without wrapping or automatic parsing.
+- Background single/batch authorization tasks, progress, final script return values, completion notifications, and bulk task-record deletion.
+- Optional automatic authorization after the original account-error path detects an authentication failure. Each failed credential state gets one automatic attempt, persisted across restarts; successful authorization clears the attempt marker. Manual authorization remains available.
+- Per-account workspace selection, authorization proxies, individual/bulk information refresh, and persisted subscription expiry information with mobile-friendly display.
+
+For a successful email-code flow, this removes the repeated open-mailbox, find-message, copy-code, and paste-code sequence. For example, authorizing 50 accounts once can avoid 50 such mailbox rounds; this is an illustration of removed steps, not a measured time saving or success-rate guarantee. Additional provider verification or execution errors still need attention. See the [runner guide](tools/reauth-runner/README.md) for setup and limitations.
+
 ## ⚠️ Important Notice
 
 Please read the following carefully before using this project:

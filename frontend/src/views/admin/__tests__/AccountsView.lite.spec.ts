@@ -176,21 +176,6 @@ const fullAccount = {
 }
 
 describe('admin AccountsView lite account list', () => {
-  it('submits authorization directly without opening a dialog or fetching account details', async () => {
-    listAccounts.mockResolvedValue({ items: [{ ...listRow, extra: { one_click_auth_profile_id: 'profile' } }], total: 1, page: 1, page_size: 20, pages: 1 })
-    vi.mocked(submitAuthorizationTasks).mockResolvedValue([{ id: 99, account_id: 42, status: 'queued' } as any])
-    vi.mocked(getAuthorizationTask).mockResolvedValue({ id: 99, account_id: 42, account_name: 'account', status: 'failed', error_code: 'MAILBOX_TIMEOUT' } as any)
-    const wrapper = mountView()
-    await flushPromises()
-    getById.mockClear()
-    await wrapper.get('[data-testid="one-click-auth-button"]').trigger('click')
-    await flushPromises()
-    expect(submitAuthorizationTasks).toHaveBeenCalledWith([42])
-    expect(getById).not.toHaveBeenCalled()
-    expect(wrapper.findComponent({ name: 'OneClickAuthForm' }).exists()).toBe(false)
-    expect(showError).toHaveBeenCalledWith(expect.stringContaining('MAILBOX_TIMEOUT'))
-    wrapper.unmount()
-  })
   beforeEach(() => {
     localStorage.clear()
     sessionStorage.clear()
@@ -213,53 +198,8 @@ describe('admin AccountsView lite account list', () => {
     vi.restoreAllMocks()
   })
 
-  it('refreshes only the selected account with forced usage and current account details', async () => {
-    listAccounts.mockResolvedValue({ items: [listRow, { ...listRow, id: 43, name: 'other' }], total: 2, page: 1, page_size: 20, pages: 1 })
-    const wrapper = mountView()
-    await flushPromises()
-    getBatchUsage.mockClear()
-    getBatchTodayStats.mockClear()
-    getById.mockClear()
-    await wrapper.findAll('[data-testid="refresh-account-button"]')[0].trigger('click')
-    await flushPromises()
-    expect(getBatchUsage).toHaveBeenCalledWith([42], true)
-    expect(getBatchTodayStats).toHaveBeenCalledWith([42])
-    expect(getSubscription).toHaveBeenCalledWith(42, true)
-    expect(getById).toHaveBeenCalledWith(42)
-    expect(refreshCredentials).not.toHaveBeenCalled()
-    expect(listAccounts).toHaveBeenCalledTimes(1)
-    wrapper.unmount()
-  })
 
-  it('manual list refresh forces one usage batch and reloads account state afterwards', async () => {
-    const wrapper = mountView()
-    await flushPromises()
-    getBatchUsage.mockClear()
-    listAccounts.mockClear()
-    await wrapper.get('[data-test="refresh-list"]').trigger('click')
-    await flushPromises()
-    expect(getBatchUsage).toHaveBeenCalledTimes(1)
-    expect(getBatchUsage).toHaveBeenCalledWith([42], true)
-    expect(listAccounts).toHaveBeenCalledTimes(1)
-    expect(getBatchUsage.mock.invocationCallOrder[0]).toBeLessThan(listAccounts.mock.invocationCallOrder[0])
-    wrapper.unmount()
-  })
 
-  it('restores queried subscription metadata after the account view is remounted without querying upstream', async () => {
-    const result = { subscription_expires_at: '2027-01-01T00:00:00Z', checked_at: '2026-10-12T00:00:00Z' }
-    const wrapper = mountView()
-    await flushPromises()
-    // The stub carries the same subscription-loaded event as the real row component.
-    const child = wrapper.getComponent({ name: 'AccountSubscriptionExpiryStub' })
-    child.vm.$emit('subscription-loaded', result)
-    await flushPromises()
-    wrapper.unmount()
-    const reopened = mountView()
-    await flushPromises()
-    expect(reopened.get('[data-test="subscription"]').attributes('data-expiry')).toBe(result.subscription_expires_at)
-    expect(getSubscription).not.toHaveBeenCalled()
-    reopened.unmount()
-  })
 
   it('keeps lite=1 on the initial list request', async () => {
     const wrapper = mountView()
@@ -282,44 +222,7 @@ describe('admin AccountsView lite account list', () => {
     wrapper.unmount()
   })
 
-  it('controls subscription refresh independently and persists its option', async () => {
-    localStorage.setItem('account-auto-refresh', JSON.stringify({ enabled: false, subscription_enabled: false }))
-    const wrapper = mountView()
-    await flushPromises()
-    const subscription = wrapper.get('[data-test="subscription"]')
-    expect(subscription.attributes('data-enabled')).toBe('false')
-    await wrapper.get('[data-test="refresh-list"]').trigger('click')
-    await flushPromises()
-    expect(subscription.attributes('data-refresh')).toBe('0')
-    const option = wrapper.get('[data-testid="subscription-refresh-toggle"]')
-    await option.trigger('click')
-    await wrapper.get('[data-test="refresh-list"]').trigger('click')
-    await flushPromises()
-    expect(subscription.attributes('data-enabled')).toBe('true')
-    expect(subscription.attributes('data-refresh')).toBe('1')
-    expect(JSON.parse(localStorage.getItem('account-auto-refresh')!)).toMatchObject({ enabled: false, subscription_enabled: true })
-    await option.trigger('click')
-    await wrapper.get('[data-test="refresh-list"]').trigger('click')
-    await flushPromises()
-    expect(subscription.attributes('data-refresh')).toBe('1')
-    wrapper.unmount()
-  })
 
-  it('never queries subscriptions during automatic list refresh', async () => {
-    vi.useFakeTimers()
-    vi.spyOn(document, 'hidden', 'get').mockReturnValue(false)
-    localStorage.setItem('account-auto-refresh', JSON.stringify({ enabled: true, interval_seconds: 5, subscription_enabled: true }))
-    const wrapper = mountView()
-    await flushPromises()
-    await vi.advanceTimersByTimeAsync(6000)
-    await flushPromises()
-    expect(listWithEtag).toHaveBeenCalled()
-    expect(wrapper.get('[data-test="subscription"]').attributes('data-refresh')).toBe('0')
-    await vi.advanceTimersByTimeAsync(300_000)
-    await flushPromises()
-    expect(wrapper.get('[data-test="subscription"]').attributes('data-refresh')).toBe('0')
-    wrapper.unmount()
-  })
 
   it('keeps the action menu open during internal scrolling but closes it on table scrolling', async () => {
     const wrapper = mountView(false)

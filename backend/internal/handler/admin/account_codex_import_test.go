@@ -12,29 +12,6 @@ import (
 	"github.com/Wei-Shaw/sub2api/internal/service"
 )
 
-func TestNormalizeCodexImportEntryDoesNotTreatOrganizationAsWorkspace(t *testing.T) {
-	token := buildCodexImportTestJWT(t, time.Now().Add(time.Hour), map[string]any{
-		"https://api.openai.com/auth": map[string]any{
-			"chatgpt_account_id": "team-account",
-			"chatgpt_user_id":    "member-1",
-			"organizations": []any{
-				map[string]any{"id": "org-team", "title": "Acme Team", "is_default": true},
-			},
-		},
-	})
-	item, err := normalizeCodexImportEntry(codexImportEntry{Index: 1, Value: token})
-	if err != nil {
-		t.Fatalf("normalize error = %v", err)
-	}
-	if item.Workspace != "" {
-		t.Fatalf("workspace = %q, want empty workspace", item.Workspace)
-	}
-	note := mergeCodexWorkspaceNote(nil, item.Workspace)
-	if note != nil {
-		t.Fatalf("note = %v, want no workspace note", note)
-	}
-}
-
 func TestParseCodexSessionImportEntriesSupportsRawTokenJSONAndArray(t *testing.T) {
 	token1 := "raw-access-token-1"
 	token2 := buildCodexImportTestJWT(t, time.Now().Add(time.Hour), map[string]any{

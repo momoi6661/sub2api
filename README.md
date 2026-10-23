@@ -20,7 +20,7 @@ English | [中文](README_CN.md) | [日本語](README_JA.md)
 
 ## This fork: less mailbox work, centralized authorization
 
-This fork extends [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) while retaining its gateway and account-management features. It includes upstream **v0.2.17** (`b0a02a330`). See the [Chinese fork overview](README_CN.md#本分支少看邮箱集中管理授权) for the full feature guide.
+This fork extends [Wei-Shaw/sub2api](https://github.com/Wei-Shaw/sub2api) while retaining its gateway and account-management features. It includes upstream **v0.2.18** (`5c185c5c5`). See the [Chinese fork overview](README_CN.md#本分支少看邮箱集中管理授权) for the full feature guide.
 
 - Protocol-based authorization for existing OpenAI / Codex accounts: read matching IMAP verification mail, complete OAuth, and import the authorization file. No account registration is performed.
 - Configurable mailbox wait (60 seconds by default) and one resend (after 30 seconds by default).
@@ -162,6 +162,16 @@ Please read the following carefully before using this project:
 <tr>
 <td width="180"><a href="https://modelflare.dev/sign-up?utm_source=github&utm_campaign=sub2api"><img src="assets/partners/logos/modelflare.png" alt="Modelflare" width="150"></a></td>
 <td>Modelflare: Full strength, stable, nothing watered down. Global SOTA models at a lower cost. Operated by US-based Havenbyte LLC, Modelflare supports GPT, Claude, Gemini, Grok, and other leading models through common compatible protocols, plus 40+ image and video models. Cache compensation is a highlight: selected OpenAI groups (price-first, stable, and premium) guarantee daily cache hit rates of 65%, 75%, or 85%, and if eligible requests fall short, Modelflare refunds the difference, visible on the usage dashboard after settlement. Special offers: a single top-up of US$20 unlocks the GPT discount group at a 0.015x price multiplier, and a single top-up of US$50 unlocks the Claude discount group at a 0.03x multiplier. Register via <a href="https://modelflare.dev/sign-up?utm_source=github&utm_campaign=sub2api">this exclusive link</a> to get started.</td>
+</tr>
+
+<tr>
+<td width="180"><a href="https://x.com/chenju_ai"><img src="assets/partners/logos/chenju_ai.png" alt="Chenju" width="150"></a></td>
+<td>Thanks to <a href="https://x.com/chenju_ai">Chenju</a> for sponsoring this project! This is probably the only ad slot in this section that doesn't ask you to sign up for anything. Good open-source projects deserve to be paid for, so Chenju is chipping in a gift and raising a glass to the author. Find <a href="https://x.com/chenju_ai">Chenju</a> on X to chat about API relays, upstream providers, or just shoot the breeze.</td>
+</tr>
+
+<tr>
+<td width="180"><a href="https://t.me/AACC8888888"><img src="assets/partners/logos/ooko.ai.png" alt="ooko.ai" width="150"></a></td>
+<td>🔑 Buying AI accounts at top prices | Gemini · Claude · GPT | Main and alt accounts all welcome, any channel wanted | Pay-per-usage supported | Seeking first-hand resources from major providers, I'll bring the KEY.<br>WeChat: Liuyou-zawd | Telegram: <a href="https://t.me/AACC8888888">AACC8888888</a></td>
 </tr>
 
 </table>

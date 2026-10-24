@@ -51,10 +51,10 @@ func normalizeReauthAuthFile(content string, existing *service.Account) (*ApplyO
 	return &ApplyOAuthCredentialsRequest{Type: "oauth", Credentials: item.Credentials, Extra: item.Extra}, nil
 }
 
-// Protocol authorization already verifies the OAuth response against the chosen
-// workspace in the runner. A workspace switch may change the ChatGPT account ID,
-// but must never change the account owner. Manual/custom files keep strict ID matching.
-func normalizeProtocolReauthAuthFile(content string, existing *service.Account) (*ApplyOAuthCredentialsRequest, error) {
+// A configured authorization profile may return a different workspace for the
+// same login. Check the owner email rather than pinning its previous workspace.
+// Without an owner email, retain strict identity matching. Manual uploads remain strict.
+func normalizeProfileReauthAuthFile(content string, existing *service.Account) (*ApplyOAuthCredentialsRequest, error) {
 	if existing == nil {
 		return normalizeReauthAuthFile(content, existing)
 	}
@@ -66,7 +66,7 @@ func normalizeProtocolReauthAuthFile(content string, existing *service.Account) 
 		email = codexCredentialString(existing.Credentials, "email")
 	}
 	if email == "" {
-		return nil, errors.New("configure account login email before switching workspace")
+		return normalizeReauthAuthFile(content, existing)
 	}
 	selection := *existing
 	selection.Credentials = make(map[string]any, len(existing.Credentials))

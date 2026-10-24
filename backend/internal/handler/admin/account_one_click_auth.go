@@ -314,11 +314,7 @@ func (h *AccountHandler) authorizeReauthProfile(ctx context.Context, account *se
 	if json.Unmarshal(result.Auth, &text) == nil {
 		content = text
 	}
-	normalize := normalizeReauthAuthFile
-	if resultType != "auth_file" {
-		normalize = normalizeProtocolReauthAuthFile
-	}
-	payload, err := normalize(content, account)
+	payload, err := normalizeProfileReauthAuthFile(content, account)
 	if err != nil {
 		return nil, &service.ReauthExecutionError{Code: "INVALID_AUTH_FILE", Message: err.Error()}
 	}

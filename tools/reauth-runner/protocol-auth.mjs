@@ -46,7 +46,9 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
     if (!Number.isSafeInteger(workspaceIndex) || workspaceIndex < 0) reject('INVALID_WORKSPACE_INDEX', 'Workspace index must be a non-negative integer (0 selects personal)')
     if (task.mailbox) {
       report('mailbox_connect')
-      const snapshot = await executeScript({ ...task, operation: 'mailbox_snapshot' }, { timeout: 10000, signal })
+      // Allow two bounded connection attempts plus folder selection. The outer
+      // deadline must outlive IMAP's connection, greeting and socket timeouts.
+      const snapshot = await executeScript({ ...task, operation: 'mailbox_snapshot' }, { timeout: 65000, signal })
       if (snapshot.type === 'error') return snapshot
       if (snapshot.type !== 'mailbox_snapshot' || !snapshot.uidNext || !snapshot.uidValidity) {
         return failure('MAILBOX_SNAPSHOT_FAILED', 'Cannot record mailbox state')
@@ -185,7 +187,7 @@ export async function authorizeWithProtocol(task, executeScript, signal, report 
         try {
           // Keep the original mailbox snapshot and reader alive during resend.
           const reading = executeScript({ ...task, resultType: 'code' }, {
-            signal: readerSignal, ...(task.mailbox ? { timeout: 190000 } : {})
+            signal: readerSignal, ...(task.mailbox ? { timeout: 245000 } : {})
           })
           const resendDue = new Promise(resolve => { resendTimer = setTimeout(() => resolve(null), (task.resendAfterSeconds || 30) * 1000) })
           result = await Promise.race([reading, resendDue])

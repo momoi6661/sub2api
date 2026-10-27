@@ -638,7 +638,11 @@ export default {
 
           PROXY_CONNECTION_FAILED: "Connection through the selected proxy failed or timed out. Check its address and connectivity.",
           PROXY_AUTH_FAILED: "Proxy authentication failed. Check the proxy username and password.",
-          MAILBOX_CONNECTION_FAILED: 'Mailbox login or reading failed. Check the host, folder and password; Gmail requires an app password. Code delivery has not started if this initial step fails.',
+          MAILBOX_CONNECTION_FAILED: 'Could not connect to the receiving mailbox. Temporary network failures are retried once within the task. Check the server address and connectivity.',
+          MAILBOX_AUTH_FAILED: 'Receiving mailbox authentication failed. Check the username and app password. This error is not retried automatically.',
+          MAILBOX_TLS_FAILED: 'Receiving mailbox TLS verification failed. Check the server address and certificate; keep certificate verification enabled.',
+          MAILBOX_FOLDER_FAILED: 'Connected to the receiving mailbox but could not open the configured folder. Check its name and permissions.',
+          MAILBOX_READ_FAILED: 'Connected to the receiving mailbox but the connection failed while reading messages.',
           MAILBOX_SNAPSHOT_FAILED: 'Could not record mailbox state. Account login has not started; check the receiving mailbox.',
           MAILBOX_TIMEOUT: "Email verification was reached but no new message matched the task email. Check recipient headers, forwarding, spam and folder settings.",
           BROWSER_START_FAILED: 'Browser startup failed. Check the authorization runner.',

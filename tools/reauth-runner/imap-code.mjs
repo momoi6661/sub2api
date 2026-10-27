@@ -1,10 +1,24 @@
 import { ImapFlow } from 'imapflow'
 import { simpleParser } from 'mailparser'
+import { setTimeout as delay } from 'node:timers/promises'
 
 const error = (code, message, retryable = false) => ({ type: 'error', error: { code, message, retryable } })
 const addresses = value => (value?.value || []).flatMap(item => item.group || [item]).map(item => (item.address || '').toLowerCase())
 // IMAP INTERNALDATE has second precision; the UID snapshot excludes older mail.
 const deliveryStart = task => Math.floor(Date.parse(task.context.since) / 1000) * 1000
+
+// Classify without exposing the server response, mailbox address or credentials.
+export function mailboxFailure(cause, stage) {
+  const code = String(cause?.code || '').toUpperCase()
+  const responseCode = String(cause?.serverResponseCode || '').toUpperCase()
+  if (cause?.authenticationFailed || ['AUTHENTICATIONFAILED', 'AUTHORIZATIONFAILED'].includes(responseCode)) {
+    return error('MAILBOX_AUTH_FAILED', 'Mailbox authentication failed; check username and app password')
+  }
+  if (/CERT|TLS|SSL/.test(code)) return error('MAILBOX_TLS_FAILED', 'Mailbox TLS verification failed; check host and certificate')
+  if (stage === 'connect') return error('MAILBOX_CONNECTION_FAILED', 'Cannot connect to the receiving mailbox', ['ETIMEDOUT', 'ETIMEOUT', 'ECONNRESET', 'ECONNREFUSED', 'EAI_AGAIN', 'ESOCKET'].includes(code))
+  if (stage === 'folder') return error('MAILBOX_FOLDER_FAILED', 'Cannot open the configured mailbox folder')
+  return error('MAILBOX_READ_FAILED', 'Mailbox connection succeeded but reading messages failed', true)
+}
 
 // Match actual delivery headers as well as To/Cc, including forwarded aliases.
 export function matchMailboxMessage(parsed, internalDate, task) {
@@ -38,15 +52,29 @@ export function matchMailboxMessage(parsed, internalDate, task) {
 
 export async function executeMailbox(task) {
   const config = task.mailbox
-  const client = new ImapFlow({
+  const createClient = () => new ImapFlow({
     host: config.host, port: config.port, secure: true,
     auth: { user: config.username || task.context.mailboxAddress, pass: task.context.secret },
     logger: false, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 8000
   })
-  client.on('error', () => {})
+  let client, stage = 'connect'
   try {
-    await client.connect()
+    for (let attempt = 0; attempt < 2; attempt++) {
+      client = createClient()
+      client.on('error', () => {})
+      try {
+        await client.connect()
+        break
+      } catch (cause) {
+        client.close()
+        const result = mailboxFailure(cause, stage)
+        if (attempt === 1 || !result.error.retryable) return result
+        await delay(500)
+      }
+    }
+    stage = 'folder'
     await client.mailboxOpen(config.folder || 'INBOX', { readOnly: true })
+    stage = 'read'
     if (task.operation === 'mailbox_snapshot') return { type: 'mailbox_snapshot', uidNext: client.mailbox.uidNext, uidValidity: String(client.mailbox.uidValidity) }
     if (String(client.mailbox.uidValidity) !== config.uidValidity) return error('MAILBOX_CHANGED', 'Mailbox was reset during this authorization task')
     const configuredSeconds = Number.parseInt(String(config.waitSeconds || process.env.MAILBOX_WAIT_SECONDS || '60'), 10)
@@ -70,7 +98,7 @@ export async function executeMailbox(task) {
       await client.noop()
     }
     return error('MAILBOX_TIMEOUT', 'No new verification email matching this account was received', true)
-  } catch {
-    return error('MAILBOX_CONNECTION_FAILED', 'Mailbox login or reading failed; check host, password and folder', true)
-  } finally { client.close() }
+  } catch (cause) {
+    return mailboxFailure(cause, stage)
+  } finally { client?.close() }
 }

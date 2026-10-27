@@ -426,7 +426,11 @@ export default {
 
           PROXY_CONNECTION_FAILED: "代理连接失败或超时，请检查选定代理的地址和连通性。",
           PROXY_AUTH_FAILED: "代理认证失败，请检查代理用户名和密码。",
-          MAILBOX_CONNECTION_FAILED: '无法登录或读取收件邮箱。检查主机、文件夹和邮箱密码；Gmail 请使用应用专用密码。此步骤失败时尚未进入发送验证码流程。',
+          MAILBOX_CONNECTION_FAILED: '连接收件邮箱失败。临时网络故障会在本次任务内重试一次；请检查邮箱服务器地址和网络连通性。',
+          MAILBOX_AUTH_FAILED: '收件邮箱登录认证失败，请检查用户名和应用专用密码；此错误不会自动重试。',
+          MAILBOX_TLS_FAILED: '收件邮箱 TLS 校验失败，请检查服务器地址和证书；请勿关闭证书校验。',
+          MAILBOX_FOLDER_FAILED: '已连接收件邮箱，但无法打开配置的文件夹，请检查文件夹名称和权限。',
+          MAILBOX_READ_FAILED: '已连接收件邮箱，但读取邮件时连接中断或发生错误。',
           MAILBOX_SNAPSHOT_FAILED: '无法记录收件邮箱状态，尚未开始账号登录。检查收件邮箱配置。',
           MAILBOX_TIMEOUT: "已进入邮箱验证码步骤，但没有读到匹配任务邮箱的新邮件。检查收件人、转发规则、垃圾邮件和文件夹。",
           BROWSER_START_FAILED: '浏览器启动失败，请检查授权执行器。',

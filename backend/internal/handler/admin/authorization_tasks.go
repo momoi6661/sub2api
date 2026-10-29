@@ -133,6 +133,24 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 			if execution.HTTPStatus >= 400 && execution.HTTPStatus <= 599 {
 				message = fmt.Sprintf("Authorization page returned HTTP %d", execution.HTTPStatus)
 			}
+			if code == "PROVIDER_SECURITY_CHALLENGE" {
+				// Persist only fixed diagnostic categories, never upstream text or URLs.
+				step := "unknown"
+				switch execution.RequestStep {
+				case "authorization_page", "email_login", "send_code", "resend_code", "code_validation", "token_exchange", "authorization_redirect", "sentinel":
+					step = execution.RequestStep
+				}
+				kind := "unknown"
+				switch execution.ChallengeType {
+				case "cloudflare", "provider", "page", "sentinel":
+					kind = execution.ChallengeType
+				}
+				statusCode := 0
+				if execution.HTTPStatus >= 100 && execution.HTTPStatus <= 599 {
+					statusCode = execution.HTTPStatus
+				}
+				message = fmt.Sprintf("Security challenge: step=%s; type=%s; HTTP=%d", step, kind, statusCode)
+			}
 			if code == "TASK_CANCELLED" {
 				status = "cancelled"
 			}
@@ -144,7 +162,7 @@ func (h *AccountHandler) finishAuthRecord(id int64, success string, err error) {
 		if errors.Is(err, context.DeadlineExceeded) {
 			code = "AUTH_TIMEOUT"
 		}
-		// Never persist arbitrary script/upstream text; only a validated numeric HTTP status.
+		// Never persist arbitrary script/upstream text; only validated diagnostic fields.
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()

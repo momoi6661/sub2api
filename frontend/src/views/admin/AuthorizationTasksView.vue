@@ -122,7 +122,10 @@ function duration(task: AuthorizationTask) { return Math.max(0, Math.floor(((tas
 function errorHint(task: AuthorizationTask) {
   const code = task.error_code
   const status = /^Authorization page returned HTTP ([45]\d{2})$/.exec(task.error_message || '')?.[1]
-  return `${code}${status ? ` (HTTP ${status})` : ''} · ${te(`${key}.errors.${code}`) ? t(`${key}.errors.${code}`) : t(`${key}.errorHint`)}`
+  const challenge = /^Security challenge: step=([a-z_]+); type=([a-z_]+); HTTP=(\d{1,3})$/.exec(task.error_message || '')
+  const detail = code === 'PROVIDER_SECURITY_CHALLENGE' && challenge
+    ? ` · ${challenge[1]} / ${challenge[2]}${challenge[3] !== '0' ? ` / HTTP ${challenge[3]}` : ''}` : ''
+  return `${code}${status ? ` (HTTP ${status})` : ''} · ${te(`${key}.errors.${code}`) ? t(`${key}.errors.${code}`) : t(`${key}.errorHint`)}${detail}`
 }
 function setPage(value: number) { void router.replace({ query: { ...route.query, page: value > 1 ? String(value) : undefined } }) }
 function clearFilters() { void router.replace({ query: { task: route.query.task } }) }

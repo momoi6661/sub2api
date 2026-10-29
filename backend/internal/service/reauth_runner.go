@@ -15,10 +15,12 @@ import (
 )
 
 type ReauthExecutionError struct {
-	Code       string `json:"code"`
-	Message    string `json:"message"`
-	Retryable  bool   `json:"retryable"`
-	HTTPStatus int    `json:"httpStatus,omitempty"`
+	Code          string `json:"code"`
+	Message       string `json:"message"`
+	Retryable     bool   `json:"retryable"`
+	HTTPStatus    int    `json:"httpStatus,omitempty"`
+	RequestStep   string `json:"requestStep,omitempty"`
+	ChallengeType string `json:"challengeType,omitempty"`
 }
 
 func (e *ReauthExecutionError) Error() string { return e.Message }

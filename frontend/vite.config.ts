@@ -87,6 +87,9 @@ export default defineConfig(({ mode }) => {
     plugins: [
       vue(),
       checker({
+        // The build script runs vue-tsc before Vite; avoid a second check
+        // competing with bundling for memory on smaller deployment hosts.
+        enableBuild: false,
         vueTsc: true
       }),
       injectPublicSettings(backendUrl)

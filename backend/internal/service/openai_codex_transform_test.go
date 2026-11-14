@@ -953,11 +953,19 @@ func TestEnsureOpenAIResponsesImageGenerationTool_PreservesImageGenNamespace(t *
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			tt.reqBody["instructions"] = "existing instructions"
 			require.True(t, hasOpenAIImageGenerationTool(tt.reqBody))
+			require.True(t, hasCodexImageGenerationNamespaceTool(tt.reqBody))
 
 			modified := ensureOpenAIResponsesImageGenerationTool(tt.reqBody)
+			choiceModified := ensureOpenAIResponsesImageGenerationToolChoiceAuto(tt.reqBody)
+			instructionsModified := applyCodexImageGenerationBridgeInstructions(tt.reqBody)
 
 			require.False(t, modified)
+			require.False(t, choiceModified)
+			require.False(t, instructionsModified)
+			require.NotContains(t, tt.reqBody, "tool_choice")
+			require.Equal(t, "existing instructions", tt.reqBody["instructions"])
 			tools, _ := tt.reqBody["tools"].([]any)
 			for _, rawTool := range tools {
 				tool, ok := rawTool.(map[string]any)
@@ -1401,6 +1409,154 @@ func TestNormalizeOpenAIResponsesImageOnlyModel_PreservesExistingImageTool(t *te
 	tool, ok := tools[0].(map[string]any)
 	require.True(t, ok)
 	require.Equal(t, "gpt-image-1.5", tool["model"])
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_PreservesClientImageFunction(t *testing.T) {
+	tests := []struct {
+		name string
+		tool map[string]any
+	}{
+		{
+			name: "flat function",
+			tool: map[string]any{"type": "function", "name": codexImageGenerationFunctionToolName},
+		},
+		{
+			name: "nested function",
+			tool: map[string]any{
+				"type":     "function",
+				"function": map[string]any{"name": codexImageGenerationFunctionToolName},
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reqBody := map[string]any{
+				"model":  "gpt-image-2.6-sunburst",
+				"prompt": "draw a cat",
+				"tools":  []any{tt.tool},
+			}
+
+			modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+			require.True(t, modified)
+			require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+			require.Equal(t, "draw a cat", reqBody["input"])
+			require.NotContains(t, reqBody, "tool_choice")
+
+			tools, ok := reqBody["tools"].([]any)
+			require.True(t, ok)
+			require.Len(t, tools, 1)
+			tool, ok := tools[0].(map[string]any)
+			require.True(t, ok)
+			require.Equal(t, "function", tool["type"])
+			require.True(t, hasCodexImageGenerationFunctionTool(reqBody))
+		})
+	}
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_ClientFunctionWinsOverHostedTool(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-image-2",
+		"input": "draw a cat",
+		"tools": []any{
+			map[string]any{"type": "image_generation", "model": "gpt-image-2"},
+			map[string]any{"type": "function", "name": codexImageGenerationFunctionToolName},
+		},
+		"tool_choice": map[string]any{"type": "image_generation"},
+	}
+
+	modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+	require.True(t, modified)
+	require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+	require.NotContains(t, reqBody, "tool_choice")
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "function", tool["type"])
+	require.Equal(t, codexImageGenerationFunctionToolName, tool["name"])
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_PreservesClientImageNamespace(t *testing.T) {
+	namespace := map[string]any{
+		"type":  "namespace",
+		"name":  "image_gen",
+		"tools": []any{map[string]any{"type": "function", "name": "imagegen"}},
+	}
+	reqBody := map[string]any{
+		"model": "gpt-image-2",
+		"input": []any{
+			map[string]any{
+				"type":  "additional_tools",
+				"tools": []any{namespace},
+			},
+		},
+	}
+
+	modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+	require.True(t, modified)
+	require.True(t, hasCodexImageGenerationNamespaceTool(reqBody))
+	require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+	require.NotContains(t, reqBody, "tool_choice")
+	require.NotContains(t, reqBody, "tools")
+
+	input, ok := reqBody["input"].([]any)
+	require.True(t, ok)
+	require.Len(t, input, 1)
+	carrier, ok := input[0].(map[string]any)
+	require.True(t, ok)
+	tools, ok := carrier["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_ClientNamespaceWinsOverHostedTool(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-image-2",
+		"tools": []any{
+			map[string]any{"type": "image_generation", "model": "gpt-image-2"},
+			map[string]any{"type": "namespace", "name": "image_gen"},
+		},
+		"tool_choice": map[string]any{"type": "image_generation"},
+	}
+
+	modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+	require.True(t, modified)
+	require.True(t, hasCodexImageGenerationNamespaceTool(reqBody))
+	require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+	require.NotContains(t, reqBody, "tool_choice")
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 1)
+	tool, ok := tools[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "namespace", tool["type"])
+}
+
+func TestNormalizeOpenAIResponsesImageOnlyModel_SimilarFunctionStillGetsHostedTool(t *testing.T) {
+	reqBody := map[string]any{
+		"model": "gpt-image-2",
+		"input": "draw a cat",
+		"tools": []any{
+			map[string]any{"type": "function", "name": "image_gen.imagegenerator"},
+		},
+	}
+
+	modified := normalizeOpenAIResponsesImageOnlyModel(reqBody)
+	require.True(t, modified)
+	require.False(t, hasCodexImageGenerationFunctionTool(reqBody))
+	require.Equal(t, openAIImagesResponsesMainModel, reqBody["model"])
+	require.Equal(t, map[string]any{"type": "image_generation"}, reqBody["tool_choice"])
+
+	tools, ok := reqBody["tools"].([]any)
+	require.True(t, ok)
+	require.Len(t, tools, 2)
+	tool, ok := tools[1].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "image_generation", tool["type"])
 }
 
 func TestValidateOpenAIResponsesImageModel_RejectsImageOnlyModel(t *testing.T) {
